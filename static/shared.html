@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旅伴協同規劃行程表</title>
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="/static/css/style.css">
+    
+    <style>
+        /* Specific layouts for shared trip */
+        .shared-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .shared-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 10px;
+        }
+        .shared-title-group h1 {
+            font-size: 2em;
+            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+        }
+        .comments-section {
+            margin-top: 15px;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px;
+        }
+        .comments-title {
+            font-size: 0.95em;
+            font-weight: 600;
+            color: #38bdf8;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .comments-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 12px;
+            padding-right: 5px;
+        }
+        .comment-item {
+            background: rgba(30, 41, 59, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 0.85em;
+        }
+        .comment-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            color: #94a3b8;
+        }
+        .comment-author {
+            font-weight: 600;
+            color: #10b981;
+        }
+        .comment-time {
+            font-size: 0.8em;
+        }
+        .comment-content {
+            color: var(--text-color);
+        }
+        .comment-form {
+            display: flex;
+            gap: 8px;
+        }
+        .comment-input-author {
+            width: 100px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85em;
+        }
+        .comment-input-content {
+            flex: 1;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--border-color);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85em;
+        }
+        .btn-comment-submit {
+            background: #38bdf8;
+            color: #0f172a;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85em;
+            transition: all 0.15s ease;
+        }
+        .btn-comment-submit:hover {
+            background: #0ea5e9;
+        }
+        .badge-shared {
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="bg-dark-radial text-slate-100 font-sans">
+
+    <div class="shared-container">
+        <!-- Header -->
+        <header class="shared-header">
+            <div class="shared-title-group">
+                <h1><i class="fa-solid fa-people-group"></i> 旅伴協同規劃行程</h1>
+                <p style="color: #94a3b8; font-size: 0.9em; margin-top: 4px;">由 AI 智慧旅行助理生成，您的旅伴可以在下方即時檢視與留下評論意見。</p>
+            </div>
+            <div>
+                <span class="badge-shared"><i class="fa-solid fa-link"></i> 協同分享模式</span>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Layout (Only Results Section) -->
+        <section class="card glass" style="flex: 1;">
+            <div class="card-header" style="justify-content: flex-start; gap: 15px; border-bottom: 1px solid var(--border-color);">
+                <button class="tab-btn active" data-tab="itinerary"><i class="fa-solid fa-list-check"></i> 旅遊行程</button>
+                <button class="tab-btn" data-tab="map"><i class="fa-solid fa-map"></i> 路線地圖</button>
+                <button class="tab-btn" data-tab="budget"><i class="fa-solid fa-chart-pie"></i> 預算分析</button>
+            </div>
+            
+            <div class="card-body" style="padding: 24px; min-height: 450px;">
+                <!-- Tab 1: Itinerary -->
+                <div class="tab-pane active" id="paneItinerary">
+                    <div id="itineraryContent" class="itinerary-md-render markdown-body">
+                        <div style="text-align: center; padding: 50px; color: #94a3b8;">
+                            <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
+                            <p style="margin-top: 15px;">正在讀取分享行程...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Map -->
+                <div class="tab-pane" id="paneMap">
+                    <div id="mapWrapper" style="display: flex; flex-direction: column; gap: 15px; width: 100%;">
+                        <div id="mapContainer" style="height: 400px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);"></div>
+                        <div id="mapSpotsListSection" style="margin-top: 10px;">
+                            <h3 style="margin-bottom: 12px; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center; gap: 8px;">
+                                <i class="fa-solid fa-route" style="color: #38bdf8;"></i> 景點行程與旅伴意見留言板
+                            </h3>
+                            <div id="mapSpotsList" style="display: grid; gap: 15px;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 3: Budget Breakdown -->
+                <div class="tab-pane" id="paneBudget">
+                    <div id="budgetContent" style="display: none; flex-direction: column; gap: 20px;">
+                        <div id="budgetAlertsZone"></div>
+                        <div class="budget-dashboard">
+                            <div class="stats-grid">
+                                <div class="stat">
+                                    <span class="stat-label">預算上限</span>
+                                    <span class="stat-val" id="statLimit">0 NTD</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-label">預估支出</span>
+                                    <span class="stat-val text-neon-blue" id="statTotal">0 NTD</span>
+                                </div>
+                                <div class="stat">
+                                    <span class="stat-label">元預算</span>
+                                    <span class="stat-val text-green" id="statMargin">0 NTD</span>
+                                </div>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="budgetChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Marked.js (Markdown parser) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Shared Logic script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const pathParts = window.location.pathname.split('/');
+            const tripId = pathParts[pathParts.length - 1];
+
+            // UI Elements
+            const tabButtons = document.querySelectorAll('.tab-btn');
+            const tabPanes = document.querySelectorAll('.tab-pane');
+            const itineraryContent = document.getElementById('itineraryContent');
+            const mapSpotsList = document.getElementById('mapSpotsList');
+            
+            const budgetContent = document.getElementById('budgetContent');
+            const budgetAlertsZone = document.getElementById('budgetAlertsZone');
+            const statLimit = document.getElementById('statLimit');
+            const statTotal = document.getElementById('statTotal');
+            const statMargin = document.getElementById('statMargin');
+            
+            let tripData = null;
+            let map = null;
+            let chart = null;
+            let mapLayers = [];
+
+            // Tab Switching
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetTab = btn.getAttribute('data-tab');
+                    tabButtons.forEach(b => b.classList.remove('active'));
+                    tabPanes.forEach(p => p.classList.remove('active'));
+                    btn.classList.add('active');
+                    
+                    if (targetTab === 'itinerary') {
+                        document.getElementById('paneItinerary').classList.add('active');
+                    } else if (targetTab === 'map') {
+                        document.getElementById('paneMap').classList.add('active');
+                        if (map) {
+                            setTimeout(() => {
+                                map.invalidateSize();
+                                if (mapLayers && mapLayers.length > 0) {
+                                    try {
+                                        const group = L.featureGroup(mapLayers);
+                                        map.fitBounds(group.getBounds(), { padding: [40, 40] });
+                                    } catch (e) {
+                                        console.log(e);
+                                    }
+                                }
+                            }, 120);
+                        }
+                    } else if (targetTab === 'budget') {
+                        document.getElementById('paneBudget').classList.add('active');
+                    }
+                });
+            });
+
+            // Fetch Trip Data
+            async function fetchTripData() {
+                try {
+                    const res = await fetch(`/api/trip/share/${tripId}`);
+                    const json = await res.json();
+                    if (json.success) {
+                        tripData = json.data;
+                        renderTrip(tripData);
+                    } else {
+                        itineraryContent.innerHTML = `<div class="error-msg">⚠️ 找不到此分享行程或連線錯誤！</div>`;
+                    }
+                } catch (err) {
+                    console.error(err);
+                    itineraryContent.innerHTML = `<div class="error-msg">⚠️ 行程載入失敗，請確認網路連線。</div>`;
+                }
+            }
+
+            function renderTrip(data) {
+                // Render Itinerary
+                itineraryContent.innerHTML = marked.parse(data.itinerary);
+
+                // Render Map
+                initMap(data.map_points);
+
+                // Render Budget
+                initChart(data.budget_data, data.exchange_rate, data.currency_code, data.weather_summary, data.is_rainy);
+            }
+
+            function initMap(points) {
+                if (map) map.remove();
+                mapLayers = [];
+
+                const centerLat = points.length > 0 ? points[0].lat : 24.15;
+                const centerLng = points.length > 0 ? points[0].lng : 120.65;
+                
+                map = L.map('mapContainer').setView([centerLat, centerLng], 12);
+                
+                L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+                    attribution: '&copy; Google Maps',
+                    maxZoom: 20
+                }).addTo(map);
+
+                const latlngs = [];
+                const pointIcon = L.divIcon({
+                    className: 'custom-map-pin',
+                    html: `
+                        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 30px; height: 30px;">
+                            <svg viewBox="0 0 24 24" width="30" height="30" style="filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.4));">
+                                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#ea4335"/>
+                            </svg>
+                        </div>
+                    `,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 30],
+                    popupAnchor: [0, -30]
+                });
+
+                points.forEach((pt, index) => {
+                    const marker = L.marker([pt.lat, pt.lng], { icon: pointIcon }).addTo(map);
+                    marker.bindPopup(`<strong>${index + 1}. ${pt.name}</strong><br/>${pt.desc}`);
+                    mapLayers.push(marker);
+                    latlngs.push([pt.lat, pt.lng]);
+                });
+
+                if (latlngs.length > 1) {
+                    const coordsStr = points.map(pt => `${pt.lng},${pt.lat}`).join(';');
+                    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?geometries=geojson&overview=full`;
+                    
+                    fetch(osrmUrl)
+                        .then(res => res.json())
+                        .then(routeData => {
+                            if (routeData.code === 'Ok' && routeData.routes && routeData.routes.length > 0) {
+                                const routeGeometry = routeData.routes[0].geometry;
+                                const routeLatLngs = routeGeometry.coordinates.map(coord => [coord[1], coord[0]]);
+                                
+                                const routeBorder = L.polyline(routeLatLngs, {
+                                    color: '#ffffff',
+                                    weight: 8,
+                                    opacity: 0.9,
+                                    lineJoin: 'round'
+                                }).addTo(map);
+                                mapLayers.push(routeBorder);
+
+                                const roadPolyline = L.polyline(routeLatLngs, {
+                                    color: '#1a73e8',
+                                    weight: 5,
+                                    opacity: 0.95,
+                                    lineJoin: 'round'
+                                }).addTo(map);
+                                mapLayers.push(roadPolyline);
+                                
+                                map.fitBounds(roadPolyline.getBounds(), { padding: [40, 40] });
+                            }
+                        })
+                        .catch(err => {
+                            // straight fallback
+                            const fallback = L.polyline(latlngs, { color: '#1a73e8', weight: 4, dashArray: '5, 10' }).addTo(map);
+                            mapLayers.push(fallback);
+                            map.fitBounds(fallback.getBounds(), { padding: [40, 40] });
+                        });
+                }
+
+                // Render Spots Comment Cards
+                renderCommentsBoard(points);
+            }
+
+            function renderCommentsBoard(points) {
+                mapSpotsList.innerHTML = "";
+                points.forEach((pt, index) => {
+                    // Filter comments for this spot
+                    const spotComments = tripData.comments.filter(c => c.spot_name === pt.name);
+                    
+                    const card = document.createElement('div');
+                    card.className = 'spot-card-container';
+                    card.style.display = 'flex';
+                    card.style.flexDirection = 'column';
+                    card.style.gap = '8px';
+                    
+                    let commentsHtml = "";
+                    spotComments.forEach(c => {
+                        commentsHtml += `
+                            <div class="comment-item">
+                                <div class="comment-meta">
+                                    <span class="comment-author">${escapeHtml(c.author)}</span>
+                                    <span class="comment-time">${c.created_at}</span>
+                                </div>
+                                <div class="comment-content">${escapeHtml(c.content)}</div>
+                            </div>
+                        `;
+                    });
+
+                    card.innerHTML = `
+                        <div class="spot-card">
+                            <div class="spot-card-info">
+                                <span class="spot-card-name">${index + 1}. ${pt.name}</span>
+                                <span class="spot-card-desc">${pt.desc}</span>
+                            </div>
+                        </div>
+                        <div class="comments-section">
+                            <div class="comments-title">
+                                <i class="fa-solid fa-comments"></i> 旅伴評論留言 (${spotComments.length})
+                            </div>
+                            <div class="comments-list" id="comments-list-${index}">
+                                ${commentsHtml || '<div style="text-align: center; color: #64748b; font-size: 0.85em; padding: 10px;">目前尚無留言，歡迎提供建議！</div>'}
+                            </div>
+                            <form class="comment-form" id="comment-form-${index}" data-spot="${pt.name}" data-index="${index}">
+                                <input type="text" placeholder="您的暱稱" class="comment-input-author" required id="author-${index}">
+                                <input type="text" placeholder="在此留下您的想法或餐飲偏好..." class="comment-input-content" required id="content-${index}">
+                                <button type="submit" class="btn-comment-submit">發表意見</button>
+                            </form>
+                        </div>
+                    `;
+                    
+                    mapSpotsList.appendChild(card);
+                    
+                    // Comment Form submit listener
+                    const form = card.querySelector(`#comment-form-${index}`);
+                    form.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const spotName = form.getAttribute('data-spot');
+                        const authorVal = document.getElementById(`author-${index}`).value.trim();
+                        const contentVal = document.getElementById(`content-${index}`).value.trim();
+                        
+                        if (!authorVal || !contentVal) return;
+                        
+                        try {
+                            const submitBtn = form.querySelector('button');
+                            submitBtn.disabled = true;
+                            submitBtn.textContent = "發表中...";
+                            
+                            const response = await fetch('/api/trip/comment', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    trip_id: tripId,
+                                    spot_name: spotName,
+                                    author: authorVal,
+                                    content: contentVal
+                                })
+                            });
+                            
+                            const resJson = await response.json();
+                            if (resJson.success) {
+                                // Reload only the comments list
+                                tripData.comments.push({
+                                    spot_name: spotName,
+                                    author: authorVal,
+                                    content: contentVal,
+                                    created_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+                                });
+                                renderCommentsBoard(points);
+                            } else {
+                                alert("留言失敗，請稍後重試。");
+                            }
+                        } catch (err) {
+                            console.error(err);
+                            alert("連線失敗，請重試。");
+                        }
+                    });
+                });
+            }
+
+            function initChart(budgetData, exchangeRate = 1.0, currencyCode = 'TWD', weatherSummary = '', isRainy = false) {
+                const ctx = document.getElementById('budgetChart').getContext('2d');
+                if (chart) chart.destroy();
+                
+                budgetAlertsZone.innerHTML = "";
+                
+                const labels = Object.keys(budgetData.breakdown);
+                const values = Object.values(budgetData.breakdown);
+                
+                chart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            backgroundColor: ['#6366f1', '#3b82f6', '#10b981', '#f59e0b', '#ec4899'],
+                            borderWidth: 1,
+                            borderColor: '#1e293b'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { color: '#e2e8f0', font: { family: 'Outfit', size: 12 } }
+                            }
+                        }
+                    }
+                });
+
+                // Set numbers
+                const isForeign = currencyCode !== 'TWD';
+                const displayLimit = isForeign ? `${budgetData.limit.toLocaleString()} 元 (~${Math.round(budgetData.limit * exchangeRate).toLocaleString()} ${currencyCode})` : `${budgetData.limit.toLocaleString()} 元`;
+                const displayTotal = isForeign ? `${budgetData.total.toLocaleString()} 元 (~${Math.round(budgetData.total * exchangeRate).toLocaleString()} ${currencyCode})` : `${budgetData.total.toLocaleString()} 元`;
+                const displayMargin = isForeign ? `${budgetData.margin.toLocaleString()} 元 (~${Math.round(budgetData.margin * exchangeRate).toLocaleString()} ${currencyCode})` : `${budgetData.margin.toLocaleString()} 元`;
+
+                statLimit.textContent = displayLimit;
+                statTotal.textContent = displayTotal;
+                statMargin.textContent = displayMargin;
+
+                if (budgetData.margin >= 0) {
+                    budgetAlertsZone.innerHTML += `
+                        <div class="budget-alert info" style="background: rgba(16, 185, 129, 0.1); border-color: #10b981;">
+                            <i class="fa-solid fa-circle-check alert-icon" style="color: #10b981;"></i>
+                            <div>
+                                <strong>✅ 預算檢核通過！</strong><br/>
+                                預估總支出為 ${displayTotal}，在限額 ${displayLimit} 內，剩餘額度為 ${displayMargin}。
+                            </div>
+                        </div>
+                    `;
+                }
+
+                if (weatherSummary) {
+                    const weatherIcon = isRainy ? 'fa-cloud-showers-water' : 'fa-cloud-sun';
+                    const iconColor = isRainy ? '#f59e0b' : '#10b981';
+                    const bgColor = isRainy ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)';
+                    const borderColor = isRainy ? '#f59e0b' : '#10b981';
+                    
+                    budgetAlertsZone.innerHTML += `
+                        <div class="budget-alert" style="margin-top: 10px; background: ${bgColor}; border-color: ${borderColor};">
+                            <i class="fa-solid ${weatherIcon} alert-icon" style="color: ${iconColor};"></i>
+                            <div>
+                                <strong>🌤️ 天氣狀態預報</strong><br/>
+                                ${weatherSummary}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                budgetContent.style.display = 'flex';
+            }
+
+            function escapeHtml(text) {
+                return text
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+
+            // Start Fetching
+            fetchTripData();
+        });
+    </script>
+</body>
+</html>

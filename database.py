@@ -46,6 +46,33 @@ def init_db():
     )
     ''')
     
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS shared_trips (
+        id TEXT PRIMARY KEY,
+        city TEXT NOT NULL,
+        itinerary TEXT NOT NULL,
+        budget_data TEXT NOT NULL,
+        map_points TEXT NOT NULL,
+        exchange_rate REAL,
+        currency_code TEXT,
+        weather_summary TEXT,
+        is_rainy INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS trip_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id TEXT NOT NULL,
+        spot_name TEXT NOT NULL,
+        author TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (trip_id) REFERENCES shared_trips (id) ON DELETE CASCADE
+    )
+    ''')
+    
     # Seed mock data if tables are empty
     cursor.execute("SELECT COUNT(*) FROM accommodations")
     if cursor.fetchone()[0] == 0:
@@ -146,6 +173,66 @@ def query_spots(city, category=None):
             "longitude": r[4],
             "open_hours": r[5],
             "description": r[6]
+        } for r in rows
+    ]
+
+def save_shared_trip(trip_id, city, itinerary, budget_data_json, map_points_json, exchange_rate, currency_code, weather_summary, is_rainy):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+    INSERT OR REPLACE INTO shared_trips (id, city, itinerary, budget_data, map_points, exchange_rate, currency_code, weather_summary, is_rainy)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (trip_id, city, itinerary, budget_data_json, map_points_json, exchange_rate, currency_code, weather_summary, 1 if is_rainy else 0))
+    conn.commit()
+    conn.close()
+
+def get_shared_trip(trip_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+    SELECT city, itinerary, budget_data, map_points, exchange_rate, currency_code, weather_summary, is_rainy
+    FROM shared_trips WHERE id = ?
+    ''', (trip_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {
+            "city": row[0],
+            "itinerary": row[1],
+            "budget_data": row[2],
+            "map_points": row[3],
+            "exchange_rate": row[4],
+            "currency_code": row[5],
+            "weather_summary": row[6],
+            "is_rainy": bool(row[7])
+        }
+    return None
+
+def add_trip_comment(trip_id, spot_name, author, content):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+    INSERT INTO trip_comments (trip_id, spot_name, author, content)
+    VALUES (?, ?, ?, ?)
+    ''', (trip_id, spot_name, author, content))
+    conn.commit()
+    conn.close()
+
+def get_trip_comments(trip_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+    SELECT spot_name, author, content, created_at FROM trip_comments
+    WHERE trip_id = ? ORDER BY created_at ASC
+    ''', (trip_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [
+        {
+            "spot_name": r[0],
+            "author": r[1],
+            "content": r[2],
+            "created_at": r[3]
         } for r in rows
     ]
 
