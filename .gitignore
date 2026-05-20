@@ -1,0 +1,16 @@
+# Environment variables
+.env
+
+# Local database
+travel_agent.db
+
+# User memory cache
+long_term_memory.json
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# User uploads folder
+uploads/
