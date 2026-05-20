@@ -47,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let map = null;
     let chart = null;
     let currentItinerary = "";
+    let mapLayers = [];
     
     // Tab Switching
     tabButtons.forEach(btn => {
@@ -64,7 +65,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('paneMap').classList.add('active');
                 if (map) {
                     // Leaflet map needs invalidation after resizing/becoming visible
-                    setTimeout(() => map.invalidateSize(), 100);
+                    setTimeout(() => {
+                        map.invalidateSize();
+                        if (mapLayers && mapLayers.length > 0) {
+                            try {
+                                const group = L.featureGroup(mapLayers);
+                                map.fitBounds(group.getBounds(), { padding: [40, 40] });
+                            } catch (e) {
+                                console.log("Tab switch fitBounds deferred:", e);
+                            }
+                        }
+                    }, 120);
                 }
             } else if (targetTab === 'budget') {
                 document.getElementById('paneBudget').classList.add('active');
@@ -214,6 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (map) {
             map.remove();
         }
+        mapLayers = [];
         
         mapContainer.style.display = 'block';
         mapPlaceholder.style.display = 'none';
@@ -236,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Custom icons
         const pointIcon = L.divIcon({
             className: 'custom-map-pin',
-            html: `<div style="background-color: var(--color-secondary); width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 10px var(--color-secondary);"></div>`,
+            html: `<div style="background-color: #0ea5e9; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 10px #0ea5e9;"></div>`,
             iconSize: [14, 14],
             iconAnchor: [7, 7]
         });
@@ -244,20 +256,73 @@ document.addEventListener('DOMContentLoaded', () => {
         points.forEach((pt, index) => {
             const marker = L.marker([pt.lat, pt.lng], { icon: pointIcon }).addTo(map);
             marker.bindPopup(`<strong>${index + 1}. ${pt.name}</strong><br/>${pt.desc}`);
+            mapLayers.push(marker);
             latlngs.push([pt.lat, pt.lng]);
         });
         
-        // Route line connecting spots
+        // Route line connecting spots (fetch OSRM driving route with straight line fallback)
         if (latlngs.length > 1) {
-            const polyline = L.polyline(latlngs, {
-                color: 'var(--color-primary)',
+            // Draw a quick fallback polyline first so the user sees something immediately
+            const fallbackPolyline = L.polyline(latlngs, {
+                color: '#6366f1',
                 weight: 3,
-                opacity: 0.8,
+                opacity: 0.5,
                 dashArray: '5, 10'
             }).addTo(map);
+            mapLayers.push(fallbackPolyline);
             
-            // Adjust bounds
-            map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+            // Adjust bounds based on fallback
+            try {
+                map.fitBounds(fallbackPolyline.getBounds(), { padding: [40, 40] });
+            } catch (e) {
+                console.log("Initial fitBounds deferred:", e);
+            }
+            
+            // Query OSRM API for real road routing
+            const coordsStr = points.map(pt => `${pt.lng},${pt.lat}`).join(';');
+            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?geometries=geojson&overview=full`;
+            
+            fetch(osrmUrl)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
+                        // Remove fallback polyline
+                        map.removeLayer(fallbackPolyline);
+                        mapLayers = mapLayers.filter(l => l !== fallbackPolyline);
+                        
+                        const routeGeometry = data.routes[0].geometry;
+                        // OSRM returns coordinates as [lng, lat], Leaflet wants [lat, lng]
+                        const routeLatLngs = routeGeometry.coordinates.map(coord => [coord[1], coord[0]]);
+                        
+                        // Indigo background glow
+                        const glowPolyline = L.polyline(routeLatLngs, {
+                            color: '#6366f1',
+                            weight: 8,
+                            opacity: 0.3,
+                            lineJoin: 'round'
+                        }).addTo(map);
+                        mapLayers.push(glowPolyline);
+
+                        // Cyber Blue main path
+                        const roadPolyline = L.polyline(routeLatLngs, {
+                            color: '#0ea5e9',
+                            weight: 4,
+                            opacity: 0.95,
+                            lineJoin: 'round'
+                        }).addTo(map);
+                        mapLayers.push(roadPolyline);
+                        
+                        // Fit to route bounds
+                        try {
+                            map.fitBounds(roadPolyline.getBounds(), { padding: [40, 40] });
+                        } catch (e) {
+                            console.log("OSRM fitBounds deferred:", e);
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error("OSRM Routing API failed, using straight-line fallback:", err);
+                });
         }
     }
     
