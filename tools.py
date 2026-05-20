@@ -30,7 +30,10 @@ def query_rag(city, topic):
     """
     city_map = {
         '台中': 'taichung_guide.md',
-        '台北': 'taipai_guide.md' # Wait, spelling in file setup was taichung_guide.md, we can support lowercase or mappings
+        '台北': 'taipei_guide.md',
+        '台南': 'tainan_guide.md',
+        '中國上海': 'shanghai_guide.md',
+        '義大利米蘭': 'milan_guide.md'
     }
     filename = city_map.get(city, 'taichung_guide.md') # Default to Taichung
     filepath = os.path.join(KNOWLEDGE_BASE_DIR, filename)

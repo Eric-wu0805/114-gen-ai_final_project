@@ -219,27 +219,39 @@ Here is the context data:
             }
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        if response.status_code == 200:
-            res_json = response.json()
-            text_response = res_json['candidates'][0]['content']['parts'][0]['text']
-            # Parse the JSON
-            result = json.loads(text_response)
-            result["success"] = True
-            
-            # Ensure keys exist
-            if "logs" not in result or "itinerary" not in result or "budget_data" not in result:
-                raise ValueError("LLM JSON output missing critical fields")
+        import time
+        max_retries = 10
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=60)
+                if response.status_code == 200:
+                    res_json = response.json()
+                    text_response = res_json['candidates'][0]['content']['parts'][0]['text']
+                    # Parse the JSON
+                    result = json.loads(text_response, strict=False)
+                    result["success"] = True
+                    
+                    # Ensure keys exist
+                    if "logs" not in result or "itinerary" not in result or "budget_data" not in result:
+                        raise ValueError("LLM JSON output missing critical fields")
+                        
+                    return result
+                else:
+                    if attempt == max_retries - 1:
+                        print(f"Gemini API returned error {response.status_code}: {response.text}")
+                        return {"success": False, "error": f"AI 系統目前忙碌中 (API 錯誤碼: {response.status_code})，請稍後再試。"}
+                    time.sleep(2)
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    print(f"LLM Call failed: {e}")
+                    return {"success": False, "error": "連線發生異常或 AI 生成失敗，請確認網路連線或稍後再試。"}
+                time.sleep(2)
                 
-            return result
-        else:
-            print(f"Gemini API returned error {response.status_code}: {response.text}")
-            # Fallback to simulation
-            return get_demo_itinerary_data()
-            
+        return {"success": False, "error": "系統發生未知錯誤，無法完成規劃。"}
+    
     except Exception as e:
-        print(f"LLM Call failed: {e}. Falling back to rule-based simulation.")
-        return get_demo_itinerary_data()
+        print(f"Agent workflow failed: {e}")
+        return {"success": False, "error": f"系統內部處理發生錯誤，請重新整理頁面再試 ({str(e)})。"}
 
 # Long-term Memory functions
 MEMORY_FILE = os.path.join(os.path.dirname(__file__), 'long_term_memory.json')

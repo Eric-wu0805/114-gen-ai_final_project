@@ -1,5 +1,6 @@
 import os
 import json
+import requests
 from flask import Flask, request, jsonify, send_from_directory, Response
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
@@ -57,22 +58,73 @@ def upload_document():
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
     
-    # Mock analysis of the document
+    # Real analysis of the document using Gemini API
     file_ext = os.path.splitext(filename)[1].lower()
-    parsed_context = ""
+    parsed_context = f"已成功上傳檔案「{filename}」。"
     
-    if 'hotel' in filename.lower() or '飯店' in filename:
-        parsed_context = "已成功解析過往訂單：預約了「台中精品商務飯店」，每晚房價 2,500 元。"
-    elif 'itinerary' in filename.lower() or '行程' in filename:
-        parsed_context = "已成功解析過往行程：包含逢甲夜市、一中商圈等餐飲偏好。"
-    else:
-        parsed_context = f"已成功上傳並分析檔案「{filename}」。系統已提取相關歷史旅行偏好偏向預算敏感型。"
+    # Try to read text
+    file_content = ""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            file_content = f.read()
+    except Exception:
+        parsed_context += "（注意：無法讀取文字內容，僅保留檔案）"
+        
+    api_key = os.getenv('GOOGLE_API_KEY', '')
+    
+    if api_key and len(file_content) > 5:
+        system_prompt = """You are a travel preference analyzer. Read the user's travel diary or receipt and extract preferences.
+You MUST output valid JSON exactly matching this format:
+{
+  "budget_sensitivity": "High (5,000 NTD limit)" or "Medium" or "Low" or "None",
+  "accommodation_pref": "Hostel (cheap)" or "Hotel (standard)" or "None",
+  "interests": ["keyword1", "keyword2"],
+  "summary": "一小段繁體中文總結這位使用者的旅行風格"
+}"""
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": f"User Document:\n{file_content[:3000]}"}]}],
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "generationConfig": {"responseMimeType": "application/json"}
+        }
+        
+        import time
+        max_retries = 10
+        for attempt in range(max_retries):
+            try:
+                resp = requests.post(url, json=payload, timeout=10)
+                if resp.status_code == 200:
+                    res_json = resp.json()
+                    text_response = res_json['candidates'][0]['content']['parts'][0]['text']
+                    analysis = json.loads(text_response, strict=False)
+                    
+                    # Update memory
+                    mem = load_memory()
+                    if "budget_sensitivity" in analysis: mem["budget_sensitivity"] = analysis["budget_sensitivity"]
+                    if "accommodation_pref" in analysis: mem["accommodation_pref"] = analysis["accommodation_pref"]
+                    if "interests" in analysis and isinstance(analysis["interests"], list):
+                        mem["interests"].extend([i for i in analysis["interests"] if i not in mem["interests"]])
+                    save_memory(mem)
+                    
+                    summary = analysis.get("summary", "成功萃取旅遊偏好。")
+                    parsed_context = f"已成功上傳檔案「{filename}」。AI 分析完成：{summary}"
+                    break
+                else:
+                    if attempt == max_retries - 1:
+                        parsed_context += f"（系統忙碌中，API 回應錯誤碼 {resp.status_code}，請稍後再試。）"
+                    time.sleep(2)
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    parsed_context += "（連線異常，無法解析檔案。）"
+                time.sleep(2)
+    elif not api_key:
+        parsed_context += "（因未提供 API Key，跳過 AI 語意分析）"
         
     return jsonify({
         "success": True, 
         "filename": filename,
         "message": parsed_context,
-        "suggested_prompt": "我上傳了過往旅行的記錄。請幫我規劃台中兩天一夜之旅，預算 5,000 元，住宿要便宜，並參考我喜歡夜市與 AI 科技景點的偏好。"
+        "suggested_prompt": "我上傳了過往旅行的記錄，請根據我最新的記憶偏好，幫我規劃新的行程。"
     })
 
 @app.route('/api/download_itinerary', methods=['POST'])
