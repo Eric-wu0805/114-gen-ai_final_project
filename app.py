@@ -108,6 +108,23 @@ def clear_user_memory():
     save_memory(empty_mem)
     return jsonify({"success": True, "message": "記憶已清除！"})
 
+@app.route('/api/alternative_spots', methods=['POST'])
+def get_alternative_spots():
+    data = request.json or {}
+    city = data.get('city', '')
+    spot_name = data.get('spot_name', '')
+    api_key_override = data.get('api_key', '')
+    
+    if not city or not spot_name:
+        return jsonify({"success": False, "error": "缺少城市或景點名稱！"}), 400
+        
+    api_key = api_key_override or os.getenv('GOOGLE_API_KEY', '')
+    
+    from agent import get_alternative_spots_from_gemini
+    result = get_alternative_spots_from_gemini(city, spot_name, api_key)
+    
+    return jsonify(result)
+
 if __name__ == '__main__':
     # Running on port 8000 for local test
     app.run(host='127.0.0.1', port=8000, debug=True)
