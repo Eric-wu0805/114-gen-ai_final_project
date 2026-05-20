@@ -333,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Budget Chart initialization
-    function initChart(budgetData) {
+    function initChart(budgetData, exchangeRate = 1.0, currencyCode = 'TWD', weatherSummary = '', isRainy = false) {
         const ctx = document.getElementById('budgetChart').getContext('2d');
         
         if (chart) {
@@ -385,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                return ` ${context.label}: ${context.raw} NTD`;
+                                return ` ${context.label}: ${context.raw} TWD`;
                             }
                         }
                     }
@@ -394,18 +394,28 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
         
-        // Summary stats
-        statLimit.textContent = `${budgetData.limit.toLocaleString()} NTD`;
-        statTotal.textContent = `${budgetData.total.toLocaleString()} NTD`;
-        statMargin.textContent = `${budgetData.margin.toLocaleString()} NTD`;
+        // Summary stats (support double currency)
+        if (currencyCode !== 'TWD' && exchangeRate !== 1.0) {
+            const localLimit = Math.round(budgetData.limit * exchangeRate);
+            const localTotal = Math.round(budgetData.total * exchangeRate);
+            const localMargin = Math.round(budgetData.margin * exchangeRate);
+            
+            statLimit.innerHTML = `${budgetData.limit.toLocaleString()} TWD<br/><span style="font-size: 0.85em; opacity: 0.75; color: #38bdf8; font-weight: normal;">≈ ${localLimit.toLocaleString()} ${currencyCode}</span>`;
+            statTotal.innerHTML = `${budgetData.total.toLocaleString()} TWD<br/><span style="font-size: 0.85em; opacity: 0.75; color: #38bdf8; font-weight: normal;">≈ ${localTotal.toLocaleString()} ${currencyCode}</span>`;
+            statMargin.innerHTML = `${budgetData.margin.toLocaleString()} TWD<br/><span style="font-size: 0.85em; opacity: 0.75; color: #38bdf8; font-weight: normal;">≈ ${localMargin.toLocaleString()} ${currencyCode}</span>`;
+        } else {
+            statLimit.textContent = `${budgetData.limit.toLocaleString()} TWD`;
+            statTotal.textContent = `${budgetData.total.toLocaleString()} TWD`;
+            statMargin.textContent = `${budgetData.margin.toLocaleString()} TWD`;
+        }
         
         // Show alerts dynamically based on limit checking
         budgetAlertsZone.innerHTML = "";
         
-        // Check if self-correction occurred (we can tell from the logs/budget ratio)
-        if (budgetData.total < budgetData.limit && budgetData.total + 1000 > budgetData.limit) {
+        // 1. Budget checking alert
+        if (budgetData.total < budgetData.limit && budgetData.total + 1000 > budgetData.limit && currencyCode === 'TWD') {
             // Simulated Taichung self correction alert
-            budgetAlertsZone.innerHTML = `
+            budgetAlertsZone.innerHTML += `
                 <div class="budget-alert warning">
                     <i class="fa-solid fa-triangle-exclamation alert-icon"></i>
                     <div>
@@ -415,12 +425,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
         } else {
-            budgetAlertsZone.innerHTML = `
-                <div class="budget-alert info">
-                    <i class="fa-solid fa-circle-check alert-icon"></i>
+            const displayTotal = currencyCode !== 'TWD' ? `${budgetData.total.toLocaleString()} 元 (~${Math.round(budgetData.total * exchangeRate).toLocaleString()} ${currencyCode})` : `${budgetData.total.toLocaleString()} 元`;
+            const displayLimit = currencyCode !== 'TWD' ? `${budgetData.limit.toLocaleString()} 元 (~${Math.round(budgetData.limit * exchangeRate).toLocaleString()} ${currencyCode})` : `${budgetData.limit.toLocaleString()} 元`;
+            const displayMargin = currencyCode !== 'TWD' ? `${budgetData.margin.toLocaleString()} 元 (~${Math.round(budgetData.margin * exchangeRate).toLocaleString()} ${currencyCode})` : `${budgetData.margin.toLocaleString()} 元`;
+            
+            budgetAlertsZone.innerHTML += `
+                <div class="budget-alert info" style="background: rgba(16, 185, 129, 0.1); border-color: #10b981;">
+                    <i class="fa-solid fa-circle-check alert-icon" style="color: #10b981;"></i>
                     <div>
                         <strong>✅ 預算檢核通過！</strong><br/>
-                        預估總支出為 ${budgetData.total.toLocaleString()} 元，在預算限額 ${budgetData.limit.toLocaleString()} 元範圍內，尚餘可用額度 ${budgetData.margin.toLocaleString()} 元。
+                        預估總支出為 ${displayTotal}，在預算限額 ${displayLimit} 範圍內，尚餘可用額度 ${displayMargin}。
+                    </div>
+                </div>
+            `;
+        }
+
+        // 2. Weather status alert
+        if (weatherSummary) {
+            const weatherIcon = isRainy ? 'fa-cloud-showers-water' : 'fa-cloud-sun';
+            const alertClass = isRainy ? 'warning' : 'info';
+            const iconColor = isRainy ? '#f59e0b' : '#10b981';
+            const bgColor = isRainy ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)';
+            const borderColor = isRainy ? '#f59e0b' : '#10b981';
+            
+            budgetAlertsZone.innerHTML += `
+                <div class="budget-alert ${alertClass}" style="margin-top: 10px; background: ${bgColor}; border-color: ${borderColor};">
+                    <i class="fa-solid ${weatherIcon} alert-icon" style="color: ${iconColor};"></i>
+                    <div>
+                        <strong>🌤️ 當地天氣即時預報</strong><br/>
+                        ${weatherSummary}
                     </div>
                 </div>
             `;
@@ -483,7 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Initialize Map & Chart
                 initMap(data.map_points);
-                initChart(data.budget_data);
+                initChart(data.budget_data, data.exchange_rate, data.currency_code, data.weather_summary, data.is_rainy);
                 
                 // Display download controls
                 dashboardFooter.style.display = 'flex';

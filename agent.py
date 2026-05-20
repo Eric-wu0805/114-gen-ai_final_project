@@ -98,7 +98,11 @@ def get_demo_itinerary_data():
             {"name": "中部科學園區-科學公園", "lat": 24.2115, "lng": 120.6128, "desc": "第二站高科技大廠園區巡禮，景色怡人。"},
             {"name": "國家歌劇院", "lat": 24.1627, "lng": 120.6405, "desc": "伊東豊雄設計的曲牆前衛建築，是重要藝文地標。"}
         ],
-        "logs": DEMO_LOGS
+        "logs": DEMO_LOGS,
+        "exchange_rate": 1.0,
+        "currency_code": "TWD",
+        "weather_summary": "天氣良好，以戶外行程為主。",
+        "is_rainy": False
     }
 
 def run_agent_workflow(prompt, api_key=None, long_term_memory=None):
@@ -155,6 +159,73 @@ def run_agent_workflow(prompt, api_key=None, long_term_memory=None):
                     match_days = re.search(r'([\u4e00-\u9fa5]{2,4})[0-9一二三四五六七八九十]+\s*天', prompt)
                     if match_days:
                         city = match_days.group(1)
+
+        # Currency Mapping & Live Exchange Rate Fetching
+        CURRENCY_MAP = {
+            "日本": "JPY", "東京": "JPY", "大阪": "JPY", "京都": "JPY", "沖繩": "JPY", "北海道": "JPY", "名古屋": "JPY", "福岡": "JPY",
+            "韓國": "KRW", "首爾": "KRW", "釜山": "KRW", "濟州": "KRW",
+            "美國": "USD", "紐約": "USD", "洛杉磯": "USD", "舊金山": "USD",
+            "泰國": "THB", "曼谷": "THB", "清邁": "THB", "普吉島": "THB",
+            "新加坡": "SGD",
+            "歐洲": "EUR", "法國": "EUR", "巴黎": "EUR", "德國": "EUR", "義大利": "EUR", "英國": "GBP", "聯敦": "GBP", "倫敦": "GBP"
+        }
+        
+        currency_code = "TWD"
+        exchange_rate = 1.0
+        
+        for k, v in CURRENCY_MAP.items():
+            if k in city or k in prompt:
+                currency_code = v
+                break
+                
+        if currency_code != "TWD":
+            try:
+                rate_res = requests.get("https://open.er-api.com/v6/latest/TWD", timeout=5)
+                if rate_res.status_code == 200:
+                    rates = rate_res.json().get("rates", {})
+                    exchange_rate = rates.get(currency_code, 1.0)
+            except Exception as e:
+                print(f"Exchange Rate API error: {e}")
+
+        # Coordinates Mapping & Weather Forecast Fetching
+        COORDINATES_MAP = {
+            "台中": (24.15, 120.65),
+            "台北": (25.03, 121.56),
+            "日本": (35.67, 139.65),
+            "東京": (35.67, 139.65),
+            "大阪": (34.69, 135.50),
+            "京都": (35.01, 135.76),
+            "沖繩": (26.21, 127.68),
+            "北海道": (43.06, 141.35),
+            "首爾": (37.56, 126.97),
+            "韓國": (37.56, 126.97),
+            "台南": (22.99, 120.20),
+            "高雄": (22.62, 120.30),
+            "花蓮": (23.98, 121.60),
+            "宜蘭": (24.75, 121.75)
+        }
+        
+        weather_lat, weather_lng = None, None
+        for k, coords in COORDINATES_MAP.items():
+            if k in city or k in prompt:
+                weather_lat, weather_lng = coords
+                break
+        
+        if not weather_lat:
+            weather_lat, weather_lng = 24.15, 120.65
+            
+        is_rainy = False
+        weather_desc = "天氣良好，以戶外行程為主。"
+        try:
+            weather_res = requests.get(f"https://api.open-meteo.com/v1/forecast?latitude={weather_lat}&longitude={weather_lng}&daily=weather_code&timezone=auto", timeout=5)
+            if weather_res.status_code == 200:
+                daily_codes = weather_res.json().get("daily", {}).get("weather_code", [])
+                rain_codes = {51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82, 85, 86, 95, 96, 99}
+                if any(code in rain_codes for code in daily_codes):
+                    is_rainy = True
+                    weather_desc = "預報旅遊期間有雨，系統已自動為您優先排定室內景點與雨天替代方案。"
+        except Exception as e:
+            print(f"Weather API error: {e}")
             
         # Extract keywords
         topics = []
@@ -188,6 +259,12 @@ Guidelines:
 - Use the provided SQLite database values and RAG data. Do not hallucinate prices or coordinates.
 - If the provided SQLite database values and RAG data are empty (which means the user requested a destination that is not Taipei or Taichung, such as Japan, Tokyo, Tainan, etc.), you MUST use your own knowledge to generate realistic accommodations, spots, coordinates (lat/lng), and prices for the requested destination, and plan the itinerary accordingly.
 - You MUST explicitly include the transportation method and its cost to travel from the starting point (default starting point is Taipei, Taiwan, unless specified otherwise) to the destination (e.g., flight, high-speed rail, train, or ferry) at the beginning of the itinerary, and calculate this transit cost in the "交通 (Transport)" budget breakdown.
+- Destination Currency: The destination currency is {currency_code}. The exchange rate is 1 TWD = {exchange_rate} {currency_code}. In the JSON "budget_data", all values MUST be in TWD. However, in the markdown "itinerary", you MUST show prices in both local currency and TWD (e.g., "1,000 JPY (約 200 TWD)").
+- Weather Optimization: The current weather forecast for the destination is: {weather_desc}. {'Since rain is expected, you MUST prioritize indoor spots (e.g. museums, galleries, shopping malls, indoor attractions) and note this rainy-day adjustments in your plan.' if is_rainy else 'Since no heavy rain is forecast, you can plan standard indoor/outdoor activities.'}
+- Quick Booking Links:
+  * For each hotel/accommodation, you MUST append a Booking.com search link: `[🏨 立即訂房](https://www.booking.com/searchresults.html?ss=飯店名稱)` (where "飯店名稱" is the exact hotel name, URL-encoded or spaces replaced by +, e.g., `[🏨 立即訂房](https://www.booking.com/searchresults.html?ss=Taichung+Premium+Hotel)`).
+  * For each spot/attraction, you MUST append a Google Maps search link: `[📍 地圖導航](https://www.google.com/maps/search/?api=1&query=景點名稱)` (where "景點名稱" is the exact spot name).
+  * At the start of the itinerary where transport is mentioned, you MUST append a booking link: `[✈️ 搜尋機票](https://www.google.com/search?q=台北到目的地機票)` or `[🚄 預訂高鐵](https://www.google.com/search?q=高鐵車票預訂)`.
 - Ensure you explain why you are making choices (e.g. geographical optimization).
 
 Here is the context data:
@@ -232,6 +309,12 @@ Here is the context data:
             if "logs" not in result or "itinerary" not in result or "budget_data" not in result:
                 raise ValueError("LLM JSON output missing critical fields")
                 
+            # Inject dynamic exchange rate and weather details
+            result["exchange_rate"] = exchange_rate
+            result["currency_code"] = currency_code
+            result["weather_summary"] = weather_desc
+            result["is_rainy"] = is_rainy
+            
             return result
         else:
             print(f"Gemini API returned error {response.status_code}: {response.text}")
