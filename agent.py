@@ -187,6 +187,7 @@ Guidelines:
 - Analyze the budget limits. If the initial high-quality plan exceeds the budget limit, perform a self-correction step by swapping expensive accommodations (hotels) with cheaper options (hostels) or adjusting travel modes, log this thought process, call the calculate_budget tool again, and proceed.
 - Use the provided SQLite database values and RAG data. Do not hallucinate prices or coordinates.
 - If the provided SQLite database values and RAG data are empty (which means the user requested a destination that is not Taipei or Taichung, such as Japan, Tokyo, Tainan, etc.), you MUST use your own knowledge to generate realistic accommodations, spots, coordinates (lat/lng), and prices for the requested destination, and plan the itinerary accordingly.
+- You MUST explicitly include the transportation method and its cost to travel from the starting point (default starting point is Taipei, Taiwan, unless specified otherwise) to the destination (e.g., flight, high-speed rail, train, or ferry) at the beginning of the itinerary, and calculate this transit cost in the "交通 (Transport)" budget breakdown.
 - Ensure you explain why you are making choices (e.g. geographical optimization).
 
 Here is the context data:

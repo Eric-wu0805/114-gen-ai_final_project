@@ -236,21 +236,27 @@ document.addEventListener('DOMContentLoaded', () => {
         
         map = L.map('mapContainer').setView([centerLat, centerLng], 12);
         
-        // Use CartoDB Dark tile layer (extremely premium dark aesthetic)
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-            subdomains: 'abcd',
+        // Use Google Maps tile layer
+        L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+            attribution: '&copy; <a href="https://www.google.com/maps">Google Maps</a>',
             maxZoom: 20
         }).addTo(map);
         
         const latlngs = [];
         
-        // Custom icons
+        // Custom Google Maps red pin icon
         const pointIcon = L.divIcon({
             className: 'custom-map-pin',
-            html: `<div style="background-color: #0ea5e9; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 10px #0ea5e9;"></div>`,
-            iconSize: [14, 14],
-            iconAnchor: [7, 7]
+            html: `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 30px; height: 30px;">
+                    <svg viewBox="0 0 24 24" width="30" height="30" style="filter: drop-shadow(0px 2px 3px rgba(0,0,0,0.4));">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#ea4335"/>
+                    </svg>
+                </div>
+            `,
+            iconSize: [30, 30],
+            iconAnchor: [15, 30],
+            popupAnchor: [0, -30]
         });
         
         points.forEach((pt, index) => {
@@ -264,9 +270,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (latlngs.length > 1) {
             // Draw a quick fallback polyline first so the user sees something immediately
             const fallbackPolyline = L.polyline(latlngs, {
-                color: '#6366f1',
-                weight: 3,
-                opacity: 0.5,
+                color: '#1a73e8',
+                weight: 4,
+                opacity: 0.6,
                 dashArray: '5, 10'
             }).addTo(map);
             mapLayers.push(fallbackPolyline);
@@ -294,19 +300,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         // OSRM returns coordinates as [lng, lat], Leaflet wants [lat, lng]
                         const routeLatLngs = routeGeometry.coordinates.map(coord => [coord[1], coord[0]]);
                         
-                        // Indigo background glow
-                        const glowPolyline = L.polyline(routeLatLngs, {
-                            color: '#6366f1',
+                        // Google Maps Route style: white border outline
+                        const routeBorder = L.polyline(routeLatLngs, {
+                            color: '#ffffff',
                             weight: 8,
-                            opacity: 0.3,
+                            opacity: 0.9,
                             lineJoin: 'round'
                         }).addTo(map);
-                        mapLayers.push(glowPolyline);
+                        mapLayers.push(routeBorder);
 
-                        // Cyber Blue main path
+                        // Google Maps Route style: central blue route
                         const roadPolyline = L.polyline(routeLatLngs, {
-                            color: '#0ea5e9',
-                            weight: 4,
+                            color: '#1a73e8',
+                            weight: 5,
                             opacity: 0.95,
                             lineJoin: 'round'
                         }).addTo(map);
