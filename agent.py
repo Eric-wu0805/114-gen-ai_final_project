@@ -134,9 +134,27 @@ def run_agent_workflow(prompt, api_key=None, long_term_memory=None):
     try:
         # 1. RAG Retrieve files
         # Extract destination keywords
+        import re
         city = "台中"
         if "台北" in prompt:
             city = "台北"
+        elif "台中" in prompt:
+            city = "台中"
+        else:
+            match = re.search(r'(?:去|玩|到|在)\s*([\u4e00-\u9fa5]{2,4})', prompt)
+            if match:
+                city = match.group(1)
+            else:
+                found = False
+                for known_city in ["日本", "韓國", "美國", "泰國", "新加坡", "東京", "大阪", "京都", "沖繩", "首爾", "曼谷", "台南", "高雄", "花蓮", "台東", "宜蘭", "新竹", "桃園", "苗栗", "彰化", "南投", "雲林", "嘉義", "屏東", "澎湖", "金門", "馬祖"]:
+                    if known_city in prompt:
+                        city = known_city
+                        found = True
+                        break
+                if not found:
+                    match_days = re.search(r'([\u4e00-\u9fa5]{2,4})[0-9一二三四五六七八九十]+\s*天', prompt)
+                    if match_days:
+                        city = match_days.group(1)
             
         # Extract keywords
         topics = []
@@ -168,6 +186,7 @@ You MUST output a JSON object containing:
 Guidelines:
 - Analyze the budget limits. If the initial high-quality plan exceeds the budget limit, perform a self-correction step by swapping expensive accommodations (hotels) with cheaper options (hostels) or adjusting travel modes, log this thought process, call the calculate_budget tool again, and proceed.
 - Use the provided SQLite database values and RAG data. Do not hallucinate prices or coordinates.
+- If the provided SQLite database values and RAG data are empty (which means the user requested a destination that is not Taipei or Taichung, such as Japan, Tokyo, Tainan, etc.), you MUST use your own knowledge to generate realistic accommodations, spots, coordinates (lat/lng), and prices for the requested destination, and plan the itinerary accordingly.
 - Ensure you explain why you are making choices (e.g. geographical optimization).
 
 Here is the context data:
@@ -182,7 +201,7 @@ Here is the context data:
 """
         
         # Make the LLM Call
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
         payload = {
             "contents": [
@@ -200,7 +219,7 @@ Here is the context data:
             }
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=20)
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
         if response.status_code == 200:
             res_json = response.json()
             text_response = res_json['candidates'][0]['content']['parts'][0]['text']
