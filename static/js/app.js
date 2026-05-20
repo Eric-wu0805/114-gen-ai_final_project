@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnClearMemory = document.getElementById('btnClearMemory');
     const btnDownloadMd = document.getElementById('btnDownloadMd');
     const btnPrintPdf = document.getElementById('btnPrintPdf');
+    const btnShareTrip = document.getElementById('btnShareTrip');
     
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('fileInput');
@@ -768,6 +769,58 @@ document.addEventListener('DOMContentLoaded', () => {
             </html>
         `);
         printWindow.document.close();
+    });
+    
+    // Generate Collaborative Share Link
+    btnShareTrip.addEventListener('click', async () => {
+        if (!currentData || !currentItinerary) return;
+        
+        btnShareTrip.disabled = true;
+        btnShareTrip.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> 正在產生分享連結...`;
+        
+        try {
+            const city = currentData.city || '台中';
+            const res = await fetch('/api/share_trip', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    city: city,
+                    itinerary: currentItinerary,
+                    budget_data: currentData.budget_data,
+                    map_points: currentData.map_points,
+                    exchange_rate: currentData.exchange_rate || 1.0,
+                    currency_code: currentData.currency_code || 'TWD',
+                    weather_summary: currentData.weather_summary || '',
+                    is_rainy: currentData.is_rainy || false
+                })
+            });
+            
+            const result = await res.json();
+            
+            if (result.success) {
+                const shareUrl = `${window.location.origin}/trip/share/${result.trip_id}`;
+                
+                // Copy to clipboard
+                try {
+                    await navigator.clipboard.writeText(shareUrl);
+                    appendTerminalLog('observation', `🎉 協同分享連結已產生並自動複製至剪貼簿！網址：${shareUrl}`);
+                    alert(`🎉 協同分享連結已產生並複製到剪貼簿！\n\n您與旅伴可以開啟此連結共同檢視行程並發表留言意見：\n${shareUrl}`);
+                } catch (clipErr) {
+                    appendTerminalLog('observation', `🎉 協同分享連結已產生！網址：${shareUrl}`);
+                    alert(`🎉 協同分享連結已產生！\n\n您與旅伴可以開啟此連結共同檢視行程並發表留言意見：\n${shareUrl}`);
+                }
+            } else {
+                alert(`產生失敗：${result.error}`);
+            }
+        } catch (err) {
+            console.error(err);
+            alert("伺服器連線失敗，請稍後重試。");
+        } finally {
+            btnShareTrip.disabled = false;
+            btnShareTrip.innerHTML = `<i class="fa-solid fa-share-nodes"></i> 產生協同分享連結`;
+        }
     });
     
     // Initial memory loading

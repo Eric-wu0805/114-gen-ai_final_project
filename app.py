@@ -125,6 +125,71 @@ def get_alternative_spots():
     
     return jsonify(result)
 
+@app.route('/api/share_trip', methods=['POST'])
+def share_trip():
+    import uuid
+    from database import save_shared_trip
+    data = request.json or {}
+    city = data.get('city', '')
+    itinerary = data.get('itinerary', '')
+    budget_data = data.get('budget_data', {})
+    map_points = data.get('map_points', [])
+    exchange_rate = data.get('exchange_rate', 1.0)
+    currency_code = data.get('currency_code', 'TWD')
+    weather_summary = data.get('weather_summary', '')
+    is_rainy = data.get('is_rainy', False)
+    
+    if not itinerary:
+        return jsonify({"success": False, "error": "行程資料為空"}), 400
+        
+    trip_id = uuid.uuid4().hex[:12]
+    
+    save_shared_trip(
+        trip_id,
+        city,
+        itinerary,
+        json.dumps(budget_data, ensure_ascii=False),
+        json.dumps(map_points, ensure_ascii=False),
+        exchange_rate,
+        currency_code,
+        weather_summary,
+        is_rainy
+    )
+    
+    return jsonify({"success": True, "trip_id": trip_id})
+
+@app.route('/api/trip/share/<trip_id>', methods=['GET'])
+def get_shared_trip_data(trip_id):
+    from database import get_shared_trip, get_trip_comments
+    trip = get_shared_trip(trip_id)
+    if not trip:
+        return jsonify({"success": False, "error": "找不到該行程"}), 404
+        
+    trip["budget_data"] = json.loads(trip["budget_data"])
+    trip["map_points"] = json.loads(trip["map_points"])
+    trip["comments"] = get_trip_comments(trip_id)
+    
+    return jsonify({"success": True, "data": trip})
+
+@app.route('/api/trip/comment', methods=['POST'])
+def post_trip_comment():
+    from database import add_trip_comment
+    data = request.json or {}
+    trip_id = data.get('trip_id', '')
+    spot_name = data.get('spot_name', '')
+    author = data.get('author', '')
+    content = data.get('content', '')
+    
+    if not trip_id or not spot_name or not author or not content:
+        return jsonify({"success": False, "error": "欄位填寫不完整"}), 400
+        
+    add_trip_comment(trip_id, spot_name, author, content)
+    return jsonify({"success": True, "message": "留言成功！"})
+
+@app.route('/trip/share/<trip_id>', methods=['GET'])
+def render_shared_trip_page(trip_id):
+    return send_from_directory('static', 'shared.html')
+
 if __name__ == '__main__':
     # Running on port 8000 for local test
     app.run(host='127.0.0.1', port=8000, debug=True)
