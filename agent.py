@@ -102,7 +102,8 @@ def get_demo_itinerary_data():
         "exchange_rate": 1.0,
         "currency_code": "TWD",
         "weather_summary": "天氣良好，以戶外行程為主。",
-        "is_rainy": False
+        "is_rainy": False,
+        "city": "台中"
     }
 
 def run_agent_workflow(prompt, api_key=None, long_term_memory=None):
@@ -265,6 +266,7 @@ Guidelines:
   * For each hotel/accommodation, you MUST append a Booking.com search link: `[🏨 立即訂房](https://www.booking.com/searchresults.html?ss=飯店名稱)` (where "飯店名稱" is the exact hotel name, URL-encoded or spaces replaced by +, e.g., `[🏨 立即訂房](https://www.booking.com/searchresults.html?ss=Taichung+Premium+Hotel)`).
   * For each spot/attraction, you MUST append a Google Maps search link: `[📍 地圖導航](https://www.google.com/maps/search/?api=1&query=景點名稱)` (where "景點名稱" is the exact spot name).
   * At the start of the itinerary where transport is mentioned, you MUST append a booking link: `[✈️ 搜尋機票](https://www.google.com/search?q=台北到目的地機票)` or `[🚄 預訂高鐵](https://www.google.com/search?q=高鐵車票預訂)`.
+- Local Food Map: For each planned spot/attraction in the itinerary, you MUST search your knowledge or RAG data for 1-2 highly-rated local restaurants or street foods within 500 meters of that spot, and list them directly under the spot's description (e.g., "*🍴 周邊美食推薦：[店名](https://www.google.com/maps/search/?api=1&query=店名) - 推薦菜色與簡介*").
 - Ensure you explain why you are making choices (e.g. geographical optimization).
 
 Here is the context data:
@@ -314,6 +316,7 @@ Here is the context data:
             result["currency_code"] = currency_code
             result["weather_summary"] = weather_desc
             result["is_rainy"] = is_rainy
+            result["city"] = city
             
             return result
         else:
@@ -349,6 +352,72 @@ def save_memory(mem):
             json.dump(mem, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print("Failed to save memory:", e)
+
+def get_alternative_spots_from_gemini(city, spot_name, api_key=None):
+    if not api_key:
+        api_key = os.getenv('GOOGLE_API_KEY', '')
+        
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    headers = {"Content-Type": "application/json"}
+    
+    system_prompt = """You are a professional travel assistant. You MUST output a JSON object containing:
+"alternatives": A list of 3 dictionaries, each with:
+- "name": (string) name of the alternative spot
+- "lat": (number) latitude
+- "lng": (number) longitude
+- "desc": (string) a short description of why this spot is a great alternative to the original spot.
+Keep coordinates as precise and realistic as possible. Do not hallucinate coordinates outside the city boundaries.
+Your output language MUST be Traditional Chinese (zh-tw).
+"""
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": f"Please recommend 3 alternative tourist spots in {city} that are close to or similar in style to '{spot_name}'."}
+                ]
+            }
+        ],
+        "systemInstruction": {
+            "parts": [{"text": system_prompt}]
+        },
+        "generationConfig": {
+            "responseMimeType": "application/json"
+        }
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=20)
+        if response.status_code == 200:
+            res_json = response.json()
+            text_response = res_json['candidates'][0]['content']['parts'][0]['text']
+            return json.loads(text_response)
+        else:
+            print(f"Gemini API error in alternatives: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"Error getting alternative spots: {e}")
+        
+    # Rule-based fallback coordinates
+    lat, lng = 24.15, 120.65
+    COORDINATES_MAP = {
+        "台中": (24.15, 120.65),
+        "台北": (25.03, 121.56),
+        "東京": (35.67, 139.65),
+        "日本": (35.67, 139.65),
+        "大阪": (34.69, 135.50),
+        "京都": (35.01, 135.76)
+    }
+    for k, v in COORDINATES_MAP.items():
+        if k in city:
+            lat, lng = v
+            break
+            
+    return {
+        "alternatives": [
+            {"name": f"{spot_name}附近的文創街區", "lat": lat + 0.005, "lng": lng - 0.005, "desc": "富含當地特色文創商品與散步街區的替代方案。"},
+            {"name": f"鄰近的市立美術館", "lat": lat - 0.003, "lng": lng + 0.004, "desc": "適合文青慢活的室內靜態展覽替代方案。"},
+            {"name": f"附近的歷史文化公園", "lat": lat + 0.002, "lng": lng + 0.002, "desc": "充滿綠意與在地歷史景致，適合午後休閒散步。"}
+        ]
+    }
 
 if __name__ == '__main__':
     # Test runner

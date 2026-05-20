@@ -33,7 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const itineraryPlaceholder = document.getElementById('itineraryPlaceholder');
     const itineraryContent = document.getElementById('itineraryContent');
     const mapPlaceholder = document.getElementById('mapPlaceholder');
+    const mapWrapper = document.getElementById('mapWrapper');
     const mapContainer = document.getElementById('mapContainer');
+    const mapSpotsList = document.getElementById('mapSpotsList');
     const budgetPlaceholder = document.getElementById('budgetPlaceholder');
     const budgetContent = document.getElementById('budgetContent');
     const budgetAlertsZone = document.getElementById('budgetAlertsZone');
@@ -48,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let chart = null;
     let currentItinerary = "";
     let mapLayers = [];
+    let currentData = null;
     
     // Tab Switching
     tabButtons.forEach(btn => {
@@ -227,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         mapLayers = [];
         
+        mapWrapper.style.display = 'flex';
         mapContainer.style.display = 'block';
         mapPlaceholder.style.display = 'none';
         
@@ -330,6 +334,125 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error("OSRM Routing API failed, using straight-line fallback:", err);
                 });
         }
+
+        // Render spots list with replacement buttons
+        mapSpotsList.innerHTML = "";
+        points.forEach((pt, index) => {
+            const spotCard = document.createElement('div');
+            spotCard.className = 'spot-card-container';
+            spotCard.style.display = 'flex';
+            spotCard.style.flexDirection = 'column';
+            spotCard.style.gap = '8px';
+            
+            spotCard.innerHTML = `
+                <div class="spot-card">
+                    <div class="spot-card-info">
+                        <span class="spot-card-name">${index + 1}. ${pt.name}</span>
+                        <span class="spot-card-desc">${pt.desc}</span>
+                    </div>
+                    <button class="btn-replace-spot" data-index="${index}" data-name="${pt.name}">
+                        <i class="fa-solid fa-arrows-rotate"></i> 替換此景點
+                    </button>
+                </div>
+                <div class="alternatives-wrapper" id="alternatives-${index}" style="display: none;"></div>
+            `;
+            
+            mapSpotsList.appendChild(spotCard);
+        });
+        
+        // Add click events to replacement buttons
+        const replaceButtons = mapSpotsList.querySelectorAll('.btn-replace-spot');
+        replaceButtons.forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const index = parseInt(btn.getAttribute('data-index'));
+                const spotName = btn.getAttribute('data-name');
+                const altContainer = document.getElementById(`alternatives-${index}`);
+                
+                // Toggle view if already loaded
+                if (altContainer.style.display === 'grid') {
+                    altContainer.style.display = 'none';
+                    return;
+                }
+                
+                // Show loading
+                altContainer.style.display = 'grid';
+                altContainer.className = 'alternatives-container';
+                altContainer.innerHTML = `
+                    <div style="grid-column: span 3; text-align: center; color: #94a3b8; font-size: 0.9em; padding: 10px;">
+                        <i class="fa-solid fa-spinner fa-spin"></i> 正在用 AI 搜尋推薦替代景點...
+                    </div>
+                `;
+                
+                try {
+                    const city = (currentData && currentData.city) ? currentData.city : '台中';
+                    const apiKey = apiKeyInput.value.trim();
+                    
+                    const res = await fetch('/api/alternative_spots', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            city: city,
+                            spot_name: spotName,
+                            api_key: apiKey
+                        })
+                    });
+                    
+                    const result = await res.json();
+                    
+                    if (result && result.alternatives && result.alternatives.length > 0) {
+                        altContainer.innerHTML = "";
+                        result.alternatives.forEach(alt => {
+                            const altCard = document.createElement('div');
+                            altCard.className = 'alternative-card';
+                            altCard.innerHTML = `
+                                <span class="alternative-name">${alt.name}</span>
+                                <span class="alternative-desc">${alt.desc}</span>
+                            `;
+                            
+                            altCard.addEventListener('click', () => {
+                                // Replace in global map points
+                                const oldName = currentData.map_points[index].name;
+                                currentData.map_points[index] = {
+                                    name: alt.name,
+                                    lat: alt.lat,
+                                    lng: alt.lng,
+                                    desc: alt.desc
+                                };
+                                
+                                // Dynamic string replacement in the markdown itinerary text
+                                if (currentItinerary.includes(oldName)) {
+                                    currentItinerary = currentItinerary.replaceAll(oldName, alt.name);
+                                    itineraryContent.innerHTML = marked.parse(currentItinerary);
+                                }
+                                
+                                // Re-render map and list
+                                initMap(currentData.map_points);
+                                
+                                // Visual success feedback
+                                appendTerminalLog('observation', `成功替換景點：將「${oldName}」更換為「${alt.name}」，地圖與路線已即時更新。`);
+                            });
+                            
+                            altContainer.appendChild(altCard);
+                        });
+                    } else {
+                        altContainer.innerHTML = `
+                            <div style="grid-column: span 3; text-align: center; color: var(--color-warning); font-size: 0.9em; padding: 10px;">
+                                ⚠️ 無法取得替代景點推薦，請稍後再試。
+                            </div>
+                        `;
+                    }
+                } catch (err) {
+                    console.error("Failed to fetch alternatives:", err);
+                    altContainer.innerHTML = `
+                        <div style="grid-column: span 3; text-align: center; color: var(--color-warning); font-size: 0.9em; padding: 10px;">
+                            ⚠️ 連線失敗，請檢查網路狀態。
+                        </div>
+                    `;
+                }
+            });
+        });
     }
     
     // Budget Chart initialization
@@ -509,6 +632,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 agentStatusBadge.className = "status-badge idle";
                 
                 // Show Itinerary Tab content
+                currentData = data;
                 currentItinerary = data.itinerary;
                 itineraryPlaceholder.style.display = 'none';
                 itineraryContent.style.display = 'block';
