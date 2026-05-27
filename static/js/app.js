@@ -1,6 +1,25 @@
 // Travel AI Agent - Frontend Script
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Configure marked to open all links in a new tab
+    const renderer = new marked.Renderer();
+    renderer.link = function(arg1, arg2, arg3) {
+        let href = "";
+        let title = "";
+        let text = "";
+        if (arg1 && typeof arg1 === 'object') {
+            href = arg1.href || "";
+            title = arg1.title || "";
+            text = arg1.text || "";
+        } else {
+            href = arg1 || "";
+            title = arg2 || "";
+            text = arg3 || "";
+        }
+        return `<a href="${href}"${title ? ` title="${title}"` : ''} target="_blank" rel="noopener noreferrer">${text}</a>`;
+    };
+    marked.use({ renderer });
+
     // UI Elements
     const promptInput = document.getElementById('promptInput');
     const apiKeyInput = document.getElementById('apiKeyInput');
