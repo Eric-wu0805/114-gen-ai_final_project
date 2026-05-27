@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Travel AI Agent - 智慧旅行規劃助理 (GitHub Pages 靜態版)</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Custom Style CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="glow-bg"></div>
+    <div class="app-container">
+        
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <i class="fa-solid fa-compass-drafting logo-icon"></i>
+                <div class="logo-text">
+                    <h1>Travel AI Agent</h1>
+                    <span class="badge">Dual-Memory & Self-Correction (Serverless)</span>
+                </div>
+            </div>
+            <div class="api-key-container">
+                <i class="fa-solid fa-key api-icon"></i>
+                <input type="password" id="apiKeyInput" placeholder="請輸入您的 Gemini API 金鑰 (必填)">
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="app-workspace">
+            
+            <!-- Column 1: Configuration & Inputs -->
+            <section class="workspace-column panel-left">
+                <!-- Planning Inputs -->
+                <div class="card glass">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-sliders"></i> 行程配置需求</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="input-group">
+                            <label for="promptInput">您的旅遊構想與預算約束</label>
+                            <textarea id="promptInput" rows="5" placeholder="例如：我想去台中兩天一夜，預算 5,000 元，住宿要便宜。我喜歡吃夜市，而且希望能去看看和 AI 或科技相關的景點。"></textarea>
+                        </div>
+                        <!-- File Upload (Mocked for static page) -->
+                        <div class="file-upload-zone" id="dropzone">
+                            <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+                            <p>拖放或點擊上傳過往行程/訂單文件</p>
+                            <span class="file-types">支援 txt, md, pdf, png</span>
+                            <input type="file" id="fileInput" style="display: none;">
+                        </div>
+                        <div id="uploadStatus" class="upload-status" style="display: none;">
+                            <i class="fa-solid fa-circle-check text-success"></i>
+                            <span id="uploadStatusText">檔案解析成功</span>
+                        </div>
+
+                        <button class="btn-primary" id="btnPlan">
+                            <span id="btnText">開始智慧規劃</span>
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Long-term Memory -->
+                <div class="card glass">
+                    <div class="card-header">
+                        <h2><i class="fa-solid fa-brain"></i> 長期偏好記憶 (Long-term)</h2>
+                        <button class="btn-icon" id="btnClearMemory" title="清除記憶"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                    <div class="card-body">
+                        <div class="memory-grid">
+                            <div class="memory-item">
+                                <label class="mem-label" for="inputMemHistory">歷史目的地</label>
+                                <input type="text" id="inputMemHistory" class="mem-input" placeholder="例如：台中, 台北">
+                            </div>
+                            <div class="memory-item">
+                                <label class="mem-label" for="selectMemBudget">預算敏感度</label>
+                                <select id="selectMemBudget" class="mem-select">
+                                    <option value="None">無</option>
+                                    <option value="High (5,000 NTD limit)">高敏感度</option>
+                                    <option value="Medium">中敏感度</option>
+                                    <option value="Low">低敏感度</option>
+                                </select>
+                            </div>
+                            <div class="memory-item">
+                                <label class="mem-label" for="selectMemAccom">住宿偏好</label>
+                                <select id="selectMemAccom" class="mem-select">
+                                    <option value="None">無</option>
+                                    <option value="Hostel (cheap)">青年旅館 (Hostel)</option>
+                                    <option value="Hotel (standard)">標準飯店 (Hotel)</option>
+                                </select>
+                            </div>
+                            <div class="memory-item">
+                                <label class="mem-label" for="inputMemInterests">特別興趣</label>
+                                <input type="text" id="inputMemInterests" class="mem-input" placeholder="例如：夜市, AI科技">
+                            </div>
+                        </div>
+                        <button class="btn-secondary" id="btnSaveMemory" style="margin-top: 8px; width: 100%;">
+                            <i class="fa-solid fa-floppy-disk"></i> 儲存偏好設定
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Column 2: Agent Console Logs -->
+            <section class="workspace-column panel-middle">
+                <div class="card glass terminal-card">
+                    <div class="card-header terminal-header">
+                        <div class="terminal-dots">
+                            <span class="dot red"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot green"></span>
+                        </div>
+                        <h2><i class="fa-solid fa-terminal"></i> Agent 思考與工具執行軌跡</h2>
+                        <span id="agentStatusBadge" class="status-badge idle">Idle</span>
+                    </div>
+                    <div class="card-body terminal-body" id="terminalLogs">
+                        <div class="terminal-welcome">
+                            <p class="text-green">> Travel AI Agent (Serverless) 初始化完成...</p>
+                            <p class="text-dim">> 請在右上方輸入您的 Gemini API 金鑰進行運作。</p>
+                            <p class="text-dim">> 本網頁完全執行於用戶端，您的 API 金鑰不會上傳至任何後端伺服器。</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Column 3: Dashboard Results -->
+            <section class="workspace-column panel-right">
+                <div class="card glass dashboard-card">
+                    <!-- Tab Headers -->
+                    <div class="tab-headers">
+                        <button class="tab-btn active" data-tab="itinerary"><i class="fa-solid fa-calendar-day"></i> 行程表</button>
+                        <button class="tab-btn" data-tab="map"><i class="fa-solid fa-map-location-dot"></i> 路線地圖</button>
+                        <button class="tab-btn" data-tab="budget"><i class="fa-solid fa-chart-pie"></i> 預算分析</button>
+                    </div>
+
+                    <!-- Tab Bodies -->
+                    <div class="tab-bodies">
+                        <!-- Tab 1: Itinerary -->
+                        <div class="tab-pane active" id="paneItinerary">
+                            <div class="result-placeholder" id="itineraryPlaceholder">
+                                <i class="fa-solid fa-route placeholder-icon"></i>
+                                <p>規劃完成後，結構化的 Markdown 行程表將在此處呈現。</p>
+                            </div>
+                            <div class="itinerary-content" id="itineraryContent" style="display: none;">
+                                <!-- Rendered MD -->
+                            </div>
+                            <!-- Chat Fine-Tuning adjustment box -->
+                            <div class="chat-adjust-container" id="chatAdjustBox" style="display: none;">
+                                <div class="chat-adjust-title">
+                                    <i class="fa-solid fa-comments"></i> 💬 AI 行程微調對話
+                                </div>
+                                <div class="chat-history" id="chatAdjustHistory">
+                                    <div class="chat-message msg-agent">
+                                        行程已規劃完成！您可以在下方輸入微調要求（例如：「我想把第一天晚上改成吃火鍋，第二天下午想改去宮原眼科」）。
+                                    </div>
+                                </div>
+                                <div class="chat-input-area">
+                                    <input type="text" id="chatAdjustInput" placeholder="請輸入您想對行程進行的調整要求...">
+                                    <button class="btn-primary" id="btnChatAdjust">
+                                        <i class="fa-solid fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab 2: Map -->
+                        <div class="tab-pane" id="paneMap">
+                            <div class="result-placeholder" id="mapPlaceholder">
+                                <i class="fa-solid fa-map placeholder-icon"></i>
+                                <p>規劃完成後，行程路線將會在地圖上動態標記出來。</p>
+                            </div>
+                            <div id="mapWrapper" style="display: none; flex-direction: column; gap: 15px;">
+                                <div id="mapContainer" style="height: 400px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);"></div>
+                                <div id="mapSpotsListSection" style="margin-top: 10px;">
+                                    <h3 style="margin-bottom: 12px; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center; gap: 8px;">
+                                        <i class="fa-solid fa-route" style="color: #38bdf8;"></i> 景點編輯與智慧替換
+                                    </h3>
+                                    <div id="mapSpotsList" style="display: grid; gap: 10px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab 3: Budget Breakdown -->
+                        <div class="tab-pane" id="paneBudget">
+                            <div class="result-placeholder" id="budgetPlaceholder">
+                                <i class="fa-solid fa-chart-column placeholder-icon"></i>
+                                <p>預算分配與超支自我修正數據將在此處以圖表呈現。</p>
+                            </div>
+                            <div class="budget-content" id="budgetContent" style="display: none;">
+                                <div class="budget-alerts" id="budgetAlertsZone">
+                                    <!-- Dynamic alerts -->
+                                </div>
+                                <div class="budget-summary-box">
+                                    <div class="stat">
+                                        <span class="stat-label">預算上限</span>
+                                        <span class="stat-val" id="statLimit">0 NTD</span>
+                                    </div>
+                                    <div class="stat">
+                                        <span class="stat-label">預估支出</span>
+                                        <span class="stat-val text-neon-blue" id="statTotal">0 NTD</span>
+                                    </div>
+                                    <div class="stat">
+                                        <span class="stat-label">賸餘預算</span>
+                                        <span class="stat-val text-green" id="statMargin">0 NTD</span>
+                                    </div>
+                                </div>
+                                <div class="chart-container">
+                                    <canvas id="budgetChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer Controls -->
+                    <div class="card-footer" id="dashboardFooter" style="display: none;">
+                        <button class="btn-secondary" id="btnDownloadMd">
+                            <i class="fa-solid fa-file-arrow-down"></i> 下載行程 (Markdown)
+                        </button>
+                        <button class="btn-secondary" id="btnPrintPdf">
+                            <i class="fa-solid fa-file-pdf"></i> 列印 / 儲存為 PDF
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Marked.js -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- App Main JS -->
+    <script src="js/app.js"></script>
+</body>
+</html>
