@@ -25,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiKeyInput = document.getElementById('apiKeyInput');
     const btnPlan = document.getElementById('btnPlan');
     const btnText = document.getElementById('btnText');
-    const btnQuickDemo = document.getElementById('btnQuickDemo');
     const btnClearMemory = document.getElementById('btnClearMemory');
     const btnDownloadMd = document.getElementById('btnDownloadMd');
     const btnPrintPdf = document.getElementById('btnPrintPdf');
@@ -71,6 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentItinerary = "";
     let mapLayers = [];
     let currentData = null;
+    let chatHistory = [];
     
     // Tab Switching
     tabButtons.forEach(btn => {
@@ -106,11 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // Quick Demo Loader
-    btnQuickDemo.addEventListener('click', () => {
-        promptInput.value = "我想去台中兩天一夜，預算 5,000 元，住宿要便宜。我喜歡吃夜市，而且希望能去看看和 AI 或科技相關的景點。";
-    });
-    
+
     // File Upload handling
     dropzone.addEventListener('click', () => fileInput.click());
     
@@ -630,6 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
         budgetPlaceholder.style.display = 'flex';
         budgetContent.style.display = 'none';
         dashboardFooter.style.display = 'none';
+        if (chatAdjustBox) chatAdjustBox.style.display = 'none';
         
         // Clear past logs and show starting
         terminalLogs.innerHTML = "";
@@ -665,6 +662,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Display download controls
                 dashboardFooter.style.display = 'flex';
                 
+                // Show chat fine-tuning box
+                if (chatAdjustBox) {
+                    chatAdjustBox.style.display = 'flex';
+                    resetChatHistory();
+                }
+
                 // Reload memory sidebar (since database updates user prefs)
                 loadMemory();
             } else {
@@ -842,6 +845,138 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
+    // Select Chat Adjust DOM Elements
+    const chatAdjustBox = document.getElementById('chatAdjustBox');
+    const chatAdjustHistory = document.getElementById('chatAdjustHistory');
+    const chatAdjustInput = document.getElementById('chatAdjustInput');
+    const btnChatAdjust = document.getElementById('btnChatAdjust');
+
+    // Function to append a message to chat history UI
+    function appendChatMessage(sender, text) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `chat-message msg-${sender}`;
+        msgDiv.textContent = text;
+        chatAdjustHistory.appendChild(msgDiv);
+        chatAdjustHistory.scrollTop = chatAdjustHistory.scrollHeight;
+    }
+
+    // Function to reset chat history to initial state
+    function resetChatHistory() {
+        chatHistory = [];
+        chatAdjustHistory.innerHTML = `
+            <div class="chat-message msg-agent">
+                行程已規劃完成！您可以在下方輸入微調要求（例如：「我想把第一天晚上改成吃火鍋，第二天下午想改去宮原眼科」）。
+            </div>
+        `;
+    }
+
+    // Handle Chat Adjust sending
+    async function handleChatAdjust() {
+        const prompt = chatAdjustInput.value.trim();
+        const apiKey = apiKeyInput.value.trim();
+        if (!prompt) return;
+
+        // Add user message to chat UI
+        appendChatMessage('user', prompt);
+        chatAdjustInput.value = "";
+
+        // Disable input elements
+        chatAdjustInput.disabled = true;
+        btnChatAdjust.disabled = true;
+
+        // Set agent thinking status
+        agentStatusBadge.textContent = "Thinking";
+        agentStatusBadge.className = "status-badge thinking";
+
+        // Clear past logs and log starting
+        terminalLogs.innerHTML = "";
+        appendTerminalLog('thought', `讀取行程調整需求："${prompt}"...`);
+
+        try {
+            const requestBody = {
+                prompt: prompt,
+                current_itinerary: currentItinerary,
+                current_budget: {
+                    ...currentData.budget_data,
+                    exchange_rate: currentData.exchange_rate || 1.0,
+                    currency_code: currentData.currency_code || 'TWD'
+                },
+                current_map_points: currentData.map_points,
+                api_key: apiKey
+            };
+
+            const response = await fetch('/api/chat_adjust', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                // Stream logs
+                await streamLogs(data.logs);
+
+                agentStatusBadge.textContent = "Success";
+                agentStatusBadge.className = "status-badge idle";
+
+                // Update state variables
+                currentData = data;
+                currentItinerary = data.itinerary;
+
+                // Re-render Itinerary
+                itineraryContent.innerHTML = marked.parse(data.itinerary);
+
+                // Re-initialize map and budget chart
+                initMap(data.map_points);
+                initChart(
+                    data.budget_data,
+                    data.exchange_rate || currentData.exchange_rate || 1.0,
+                    data.currency_code || currentData.currency_code || 'TWD',
+                    data.weather_summary || currentData.weather_summary || '',
+                    data.is_rainy !== undefined ? data.is_rainy : currentData.is_rainy
+                );
+
+                // Extract reply from logs or use default
+                let agentReply = "已成功調整行程！請查看更新後的行程表、地圖與預算。";
+                if (data.logs && data.logs.length > 0) {
+                    for (let i = data.logs.length - 1; i >= 0; i--) {
+                        const content = data.logs[i].content;
+                        if (content.includes("已") || content.includes("將") || content.includes("調整") || content.includes("更換") || content.includes("修改") || content.includes("不變") || content.includes("保留") || content.includes("警告") || content.includes("超支")) {
+                            agentReply = content;
+                            break;
+                        }
+                    }
+                }
+                appendChatMessage('agent', agentReply);
+            } else {
+                appendTerminalLog('observation', `微調失敗：${data.error}`);
+                appendChatMessage('agent', `❌ 微調失敗：${data.error}`);
+                agentStatusBadge.textContent = "Error";
+                agentStatusBadge.className = "status-badge idle";
+            }
+        } catch (err) {
+            console.error(err);
+            appendTerminalLog('observation', '通訊失敗！伺服器異常或連線中斷。');
+            appendChatMessage('agent', '❌ 通訊失敗，無法連線至伺服器。');
+            agentStatusBadge.textContent = "Error";
+            agentStatusBadge.className = "status-badge idle";
+        } finally {
+            chatAdjustInput.disabled = false;
+            btnChatAdjust.disabled = false;
+            chatAdjustInput.focus();
+        }
+    }
+
+    if (btnChatAdjust && chatAdjustInput) {
+        btnChatAdjust.addEventListener('click', handleChatAdjust);
+        chatAdjustInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                handleChatAdjust();
+            }
+        });
+    }
+
     // Initial memory loading
     loadMemory();
 });

@@ -47,12 +47,6 @@
                             <label for="promptInput">您的旅遊構想與預算約束</label>
                             <textarea id="promptInput" rows="5" placeholder="例如：我想去台中兩天一夜，預算 5,000 元，住宿要便宜。我喜歡吃夜市，而且希望能去看看和 AI 或科技相關的景點。"></textarea>
                         </div>
-                        <div class="quick-prompts">
-                            <button class="btn-quick" id="btnQuickDemo">
-                                <i class="fa-solid fa-wand-magic-sparkles"></i> 載入台中 Demo 範例
-                            </button>
-                        </div>
-                        
                         <!-- File Upload -->
                         <div class="file-upload-zone" id="dropzone">
                             <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
@@ -155,6 +149,23 @@
                             </div>
                             <div class="itinerary-content" id="itineraryContent" style="display: none;">
                                 <!-- Rendered MD -->
+                            </div>
+                            <!-- Chat Fine-Tuning adjustment box -->
+                            <div class="chat-adjust-container" id="chatAdjustBox" style="display: none;">
+                                <div class="chat-adjust-title">
+                                    <i class="fa-solid fa-comments"></i> 💬 AI 行程微調對話
+                                </div>
+                                <div class="chat-history" id="chatAdjustHistory">
+                                    <div class="chat-message msg-agent">
+                                        行程已規劃完成！您可以在下方輸入微調要求（例如：「我想把第一天晚上改成吃火鍋，第二天下午想改去宮原眼科」）。
+                                    </div>
+                                </div>
+                                <div class="chat-input-area">
+                                    <input type="text" id="chatAdjustInput" placeholder="請輸入您想對行程進行的調整要求...">
+                                    <button class="btn-primary" id="btnChatAdjust">
+                                        <i class="fa-solid fa-paper-plane"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
