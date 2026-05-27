@@ -4,7 +4,7 @@ from flask import Flask, request, jsonify, send_from_directory, Response
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 import database
-from agent import run_agent_workflow, load_memory, save_memory
+from agent import run_agent_workflow, load_memory, save_memory, adjust_itinerary_workflow
 
 load_dotenv()
 
@@ -42,6 +42,29 @@ def plan_itinerary():
     # Run Agent Core
     result = run_agent_workflow(prompt, api_key, memory)
     
+    return jsonify(result)
+
+@app.route('/api/chat_adjust', methods=['POST'])
+def adjust_itinerary():
+    data = request.json or {}
+    prompt = data.get('prompt', '')
+    current_itinerary = data.get('current_itinerary', '')
+    current_budget = data.get('current_budget', {})
+    current_map_points = data.get('current_map_points', [])
+    api_key_override = data.get('api_key', '')
+    
+    if not prompt or not current_itinerary:
+        return jsonify({"success": False, "error": "缺少必要之微調對話或當前行程資訊！"}), 400
+        
+    api_key = api_key_override or os.getenv('GOOGLE_API_KEY', '')
+    
+    result = adjust_itinerary_workflow(
+        prompt,
+        current_itinerary,
+        current_budget,
+        current_map_points,
+        api_key
+    )
     return jsonify(result)
 
 @app.route('/api/upload_doc', methods=['POST'])
