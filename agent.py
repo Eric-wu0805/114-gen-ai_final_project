@@ -1,11 +1,34 @@
 import os
 import json
 import requests
+import time
 from dotenv import load_dotenv
 import database
 import tools
 
 load_dotenv()
+
+
+def post_with_retry(url, headers, json_payload, timeout=60, max_retries=3, backoff_delay=1.0):
+    response = None
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, json=json_payload, timeout=timeout)
+            if response.status_code == 200:
+                return response
+            elif response.status_code in [429, 500, 503, 504]:
+                print(f"Gemini API returned transient status {response.status_code}. Retrying in {backoff_delay}s... (Attempt {attempt+1}/{max_retries})")
+                time.sleep(backoff_delay)
+                backoff_delay *= 2.0
+            else:
+                return response
+        except requests.exceptions.RequestException as e:
+            print(f"Network error on attempt {attempt+1}/{max_retries}: {e}")
+            if attempt == max_retries - 1:
+                raise e
+            time.sleep(backoff_delay)
+            backoff_delay *= 2.0
+    return response
 
 
 
@@ -198,8 +221,8 @@ Here is the context data:
             }
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        if response.status_code == 200:
+        response = post_with_retry(url, headers=headers, json_payload=payload, timeout=60)
+        if response and response.status_code == 200:
             res_json = response.json()
             text_response = res_json['candidates'][0]['content']['parts'][0]['text']
             # Parse the JSON
@@ -285,8 +308,8 @@ Your output language MUST be Traditional Chinese (zh-tw).
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=20)
-        if response.status_code == 200:
+        response = post_with_retry(url, headers=headers, json_payload=payload, timeout=20)
+        if response and response.status_code == 200:
             res_json = response.json()
             text_response = res_json['candidates'][0]['content']['parts'][0]['text']
             return json.loads(text_response)
@@ -409,8 +432,8 @@ Context data:
             }
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        if response.status_code == 200:
+        response = post_with_retry(url, headers=headers, json_payload=payload, timeout=60)
+        if response and response.status_code == 200:
             res_json = response.json()
             text_response = res_json['candidates'][0]['content']['parts'][0]['text']
             result = json.loads(text_response)
@@ -427,6 +450,67 @@ Context data:
     except Exception as e:
         print(f"Adjust itinerary failed: {e}")
         return {"success": False, "error": f"發生異常錯誤：{str(e)}"}
+
+def get_demo_itinerary_data():
+    return {
+        "success": True,
+        "city": "台中",
+        "logs": [
+            {"type": "thought", "content": "Gemini API 暫時無法連線。系統已自動啟用備用模擬引擎以提供預設的台中兩天一夜行程規劃。"},
+            {"type": "observation", "content": "套用備用資料庫中的高 CP 值科技與美食景點組合。"}
+        ],
+        "itinerary": """# 台中兩天一夜高CP值科技與美食之旅 (備用行程)
+
+> ⚠️ **注意**：由於 AI 服務忙碌，目前顯示的是備用預設行程。
+
+## 🎯 行程概覽
+* **總天數**：2 天 1 起
+* **主要目的地**：台中市
+* **預估預算**：3,350 TWD / 人
+* **交通方式**：台北往返台中高鐵 + 當地步行與公車
+
+---
+
+## 📅 第一天：科技與夜市體驗
+* **10:00 - 12:00** | 🚄 搭乘高鐵抵達台中。
+* **13:00 - 15:30** | 🦖 [國立自然科學博物館](https://www.google.com/maps/search/?api=1&query=國立自然科學博物館) (⭐ 4.7)
+  * *🍴 周邊美食推薦：[科博館水煎包](https://www.google.com/maps/search/?api=1&query=科博館水煎包)*
+* **16:00 - 17:30** | 🎭 [國家歌劇院](https://www.google.com/maps/search/?api=1&query=國家歌劇院) (⭐ 4.8)
+* **18:00 - 21:00** | 🍢 [逢甲夜市](https://www.google.com/maps/search/?api=1&query=逢甲夜市) (⭐ 4.5)
+* **21:30** | 🏨 入住 [台中 Loft 青年旅館 (Taichung Loft Hostel)](https://www.booking.com/searchresults.html?ss=Taichung+Loft+Hostel) (⭐ 4.8)
+
+---
+
+## 📅 第二天：文創與綠意散步
+* **09:30 - 12:00** | 🤖 [中部科學園區 - 科學公園](https://www.google.com/maps/search/?api=1&query=中部科學園區+-+科學公園) (⭐ 4.4)
+* **13:00 - 15:30** | 🎨 [台中軟體園區 - Dali Art 藝術廣場](https://www.google.com/maps/search/?api=1&query=台中軟體園區+-+Dali+Art+藝術廣場) (⭐ 4.1)
+* **16:00** | 🚄 搭乘高鐵返回台北。
+""",
+        "budget_data": {
+            "total": 3350,
+            "limit": 5000,
+            "margin": 1650,
+            "breakdown": {
+                "住宿 (Lodging)": 800,
+                "交通 (Transport)": 1400,
+                "餐飲 (Dining)": 1000,
+                "景點門票 (Spots)": 150,
+                "其他/備用 (Other/Emergency)": 0
+            }
+        },
+        "map_points": [
+            {"name": "國立自然科學博物館", "lat": 24.1557, "lng": 120.6601, "desc": "科博館"},
+            {"name": "國家歌劇院", "lat": 24.1627, "lng": 120.6405, "desc": "歌劇院"},
+            {"name": "逢甲夜市", "lat": 24.1798, "lng": 120.6450, "desc": "夜市"},
+            {"name": "台中 Loft 青年旅館", "lat": 24.1512, "lng": 120.6620, "desc": "青旅住宿"},
+            {"name": "中部科學園區 - 科學公園", "lat": 24.2115, "lng": 120.6128, "desc": "科學公園"},
+            {"name": "台中軟體園區 - Dali Art 藝術廣場", "lat": 24.0850, "lng": 120.6970, "desc": "藝術廣場"}
+        ],
+        "exchange_rate": 1.0,
+        "currency_code": "TWD",
+        "weather_summary": "目的地天氣良好，平均氣溫 24°C。",
+        "is_rainy": False
+    }
 
 if __name__ == '__main__':
     # Test runner

@@ -1019,4 +1019,23 @@ textarea:focus {
     margin: 0;
 }
 
+/* Drag and Drop Spot Cards styles */
+.spot-card-container {
+    cursor: grab;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    user-select: none;
+}
+.spot-card-container:active {
+    cursor: grabbing;
+}
+.spot-card-container.dragging {
+    opacity: 0.4;
+    transform: scale(0.98);
+}
+.spot-card-container.drag-over {
+    border: 2px dashed #38bdf8 !important;
+    background: rgba(56, 189, 248, 0.05);
+    border-radius: 10px;
+}
+
 

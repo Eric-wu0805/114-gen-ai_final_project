@@ -360,6 +360,10 @@ document.addEventListener('DOMContentLoaded', () => {
             spotCard.style.flexDirection = 'column';
             spotCard.style.gap = '8px';
             
+            // Enable HTML5 drag and drop
+            spotCard.setAttribute('draggable', 'true');
+            spotCard.dataset.index = index;
+            
             spotCard.innerHTML = `
                 <div class="spot-card">
                     <div class="spot-card-info">
@@ -372,6 +376,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="alternatives-wrapper" id="alternatives-${index}" style="display: none;"></div>
             `;
+            
+            // Drag event listeners
+            spotCard.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', index);
+                spotCard.classList.add('dragging');
+            });
+
+            spotCard.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                spotCard.classList.add('drag-over');
+            });
+
+            spotCard.addEventListener('dragleave', () => {
+                spotCard.classList.remove('drag-over');
+            });
+
+            spotCard.addEventListener('dragend', () => {
+                spotCard.classList.remove('dragging');
+                const allCards = mapSpotsList.querySelectorAll('.spot-card-container');
+                allCards.forEach(card => card.classList.remove('drag-over'));
+            });
+
+            spotCard.addEventListener('drop', (e) => {
+                e.preventDefault();
+                spotCard.classList.remove('drag-over');
+                const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'));
+                const targetIndex = index;
+                
+                if (sourceIndex !== targetIndex && currentData && currentData.map_points) {
+                    const [movedItem] = currentData.map_points.splice(sourceIndex, 1);
+                    currentData.map_points.splice(targetIndex, 0, movedItem);
+                    
+                    // Re-render Leaflet Map, route, and list
+                    initMap(currentData.map_points);
+                    
+                    // Display success log in terminal
+                    appendTerminalLog('observation', `成功調整景點排序：將「${movedItem.name}」移至第 ${targetIndex + 1} 順位，地圖導航與路線順序已即時重新計算。`);
+                }
+            });
             
             mapSpotsList.appendChild(spotCard);
         });
