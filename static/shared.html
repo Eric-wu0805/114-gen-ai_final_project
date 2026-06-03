@@ -168,6 +168,14 @@
                 <!-- Tab 2: Map -->
                 <div class="tab-pane" id="paneMap">
                     <div id="mapWrapper" style="display: flex; flex-direction: column; gap: 15px; width: 100%;">
+                        <div class="map-controls-bar">
+                            <span><i class="fa-solid fa-road"></i> 交通運輸模式</span>
+                            <select id="transportModeSelect" class="map-select-control">
+                                <option value="driving">🚗 自駕/汽車 (Driving)</option>
+                                <option value="foot">🚶 徒步/步行 (Walking)</option>
+                                <option value="bicycle">🚲 單車/自行車 (Cycling)</option>
+                            </select>
+                        </div>
                         <div id="mapContainer" style="height: 400px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color);"></div>
                         <div id="mapSpotsListSection" style="margin-top: 10px;">
                             <h3 style="margin-bottom: 12px; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center; gap: 8px;">
@@ -244,6 +252,7 @@
             const tabPanes = document.querySelectorAll('.tab-pane');
             const itineraryContent = document.getElementById('itineraryContent');
             const mapSpotsList = document.getElementById('mapSpotsList');
+            const transportModeSelect = document.getElementById('transportModeSelect');
             
             const budgetContent = document.getElementById('budgetContent');
             const budgetAlertsZone = document.getElementById('budgetAlertsZone');
@@ -325,7 +334,13 @@
                           Math.sin(dLng / 2) * Math.sin(dLng / 2);
                 const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                 const distance = R * c; // in km
-                const duration = distance * 60 / 35; // assume 35 km/h average speed in city
+                
+                const mode = transportModeSelect ? transportModeSelect.value : 'driving';
+                let speed = 35;
+                if (mode === 'foot') speed = 5;
+                else if (mode === 'bicycle') speed = 15;
+                
+                const duration = distance * 60 / speed;
                 return {
                     distance: distance,
                     duration: duration
@@ -369,6 +384,15 @@
                 });
 
                 // Draw route info badges on the map (initially Haversine-based)
+                const mode = transportModeSelect ? transportModeSelect.value : 'driving';
+                const modeIcons = {
+                    driving: 'fa-car',
+                    foot: 'fa-person-walking',
+                    bicycle: 'fa-bicycle'
+                };
+                const modeIconClass = modeIcons[mode] || 'fa-car';
+                const modeEmoji = mode === 'foot' ? '🚶' : mode === 'bicycle' ? '🚲' : '🚗';
+
                 if (latlngs.length > 1) {
                     for (let i = 0; i < points.length - 1; i++) {
                         const pt1 = points[i];
@@ -382,7 +406,7 @@
                         
                         const infoIcon = L.divIcon({
                             className: 'route-info-badge-icon',
-                            html: `<div class="route-map-badge" id="map-badge-${i}">🚗 ${estDistanceStr} (${estDurationStr})</div>`,
+                            html: `<div class="route-map-badge" id="map-badge-${i}">${modeEmoji} ${estDistanceStr} (${estDurationStr})</div>`,
                             iconSize: [100, 24],
                             iconAnchor: [50, 12]
                         });
@@ -394,7 +418,7 @@
 
                 if (latlngs.length > 1) {
                     const coordsStr = points.map(pt => `${pt.lng},${pt.lat}`).join(';');
-                    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?geometries=geojson&overview=full`;
+                    const osrmUrl = `https://router.project-osrm.org/route/v1/${mode === 'foot' ? 'foot' : mode === 'bicycle' ? 'bicycle' : 'driving'}/${coordsStr}?geometries=geojson&overview=full`;
                     
                     fetch(osrmUrl)
                         .then(res => res.json())
@@ -429,7 +453,7 @@
                                     const badgeEl = document.getElementById(`connector-badge-${i}`);
                                     if (badgeEl) {
                                         badgeEl.innerHTML = `
-                                            <i class="fa-solid fa-car"></i>
+                                            <i class="fa-solid ${modeIconClass}"></i>
                                             <span>${actualDistance} (${actualDuration})</span>
                                         `;
                                     }
@@ -437,7 +461,7 @@
                                     // Update map badge
                                     const mapBadgeEl = document.getElementById(`map-badge-${i}`);
                                     if (mapBadgeEl) {
-                                        mapBadgeEl.textContent = `🚗 ${actualDistance} (${actualDuration})`;
+                                        mapBadgeEl.textContent = `${modeEmoji} ${actualDistance} (${actualDuration})`;
                                     }
                                 });
                                 
@@ -515,10 +539,18 @@
                         const estDistanceStr = est.distance.toFixed(1) + " km";
                         const estDurationStr = Math.round(est.duration) + " 分鐘";
                         
+                        const mode = transportModeSelect ? transportModeSelect.value : 'driving';
+                        const modeIcons = {
+                            driving: 'fa-car',
+                            foot: 'fa-person-walking',
+                            bicycle: 'fa-bicycle'
+                        };
+                        const modeIconClass = modeIcons[mode] || 'fa-car';
+                        
                         connector.innerHTML = `
                             <div class="connector-line"></div>
                             <div class="connector-badge" id="connector-badge-${index}">
-                                <i class="fa-solid fa-car"></i>
+                                <i class="fa-solid ${modeIconClass}"></i>
                                 <span>約 ${estDistanceStr} (${estDurationStr})</span>
                             </div>
                             <div class="connector-line"></div>
@@ -656,6 +688,15 @@
                     .replace(/>/g, "&gt;")
                     .replace(/"/g, "&quot;")
                     .replace(/'/g, "&#039;");
+            }
+
+            // Transport mode change listener
+            if (transportModeSelect) {
+                transportModeSelect.addEventListener('change', () => {
+                    if (tripData && tripData.map_points) {
+                        initMap(tripData.map_points);
+                    }
+                });
             }
 
             // Start Fetching

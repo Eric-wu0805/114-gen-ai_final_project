@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mapWrapper = document.getElementById('mapWrapper');
     const mapContainer = document.getElementById('mapContainer');
     const mapSpotsList = document.getElementById('mapSpotsList');
+    const transportModeSelect = document.getElementById('transportModeSelect');
     const budgetPlaceholder = document.getElementById('budgetPlaceholder');
     const budgetContent = document.getElementById('budgetContent');
     const budgetAlertsZone = document.getElementById('budgetAlertsZone');
@@ -250,7 +251,13 @@ document.addEventListener('DOMContentLoaded', () => {
                   Math.sin(dLng / 2) * Math.sin(dLng / 2);
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         const distance = R * c; // in km
-        const duration = distance * 60 / 35; // assume 35 km/h average speed in city
+        
+        const mode = transportModeSelect ? transportModeSelect.value : 'driving';
+        let speed = 35;
+        if (mode === 'foot') speed = 5;
+        else if (mode === 'bicycle') speed = 15;
+        
+        const duration = distance * 60 / speed;
         return {
             distance: distance,
             duration: duration
@@ -302,6 +309,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Draw route info badges on the map (initially Haversine-based)
+        const mode = transportModeSelect ? transportModeSelect.value : 'driving';
+        const modeIcons = {
+            driving: 'fa-car',
+            foot: 'fa-person-walking',
+            bicycle: 'fa-bicycle'
+        };
+        const modeIconClass = modeIcons[mode] || 'fa-car';
+        const modeEmoji = mode === 'foot' ? '🚶' : mode === 'bicycle' ? '🚲' : '🚗';
+
         if (latlngs.length > 1) {
             for (let i = 0; i < points.length - 1; i++) {
                 const pt1 = points[i];
@@ -315,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const infoIcon = L.divIcon({
                     className: 'route-info-badge-icon',
-                    html: `<div class="route-map-badge" id="map-badge-${i}">🚗 ${estDistanceStr} (${estDurationStr})</div>`,
+                    html: `<div class="route-map-badge" id="map-badge-${i}">${modeEmoji} ${estDistanceStr} (${estDurationStr})</div>`,
                     iconSize: [100, 24],
                     iconAnchor: [50, 12]
                 });
@@ -339,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (e) {}
             
             const coordsStr = points.map(pt => `${pt.lng},${pt.lat}`).join(';');
-            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?geometries=geojson&overview=full`;
+            const osrmUrl = `https://router.project-osrm.org/route/v1/${mode === 'foot' ? 'foot' : mode === 'bicycle' ? 'bicycle' : 'driving'}/${coordsStr}?geometries=geojson&overview=full`;
             
             fetch(osrmUrl)
                 .then(res => res.json())
@@ -377,7 +393,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const badgeEl = document.getElementById(`connector-badge-${i}`);
                             if (badgeEl) {
                                 badgeEl.innerHTML = `
-                                    <i class="fa-solid fa-car"></i>
+                                    <i class="fa-solid ${modeIconClass}"></i>
                                     <span>${actualDistance} (${actualDuration})</span>
                                 `;
                             }
@@ -385,7 +401,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             // Update map badge
                             const mapBadgeEl = document.getElementById(`map-badge-${i}`);
                             if (mapBadgeEl) {
-                                mapBadgeEl.textContent = `🚗 ${actualDistance} (${actualDuration})`;
+                                mapBadgeEl.textContent = `${modeEmoji} ${actualDistance} (${actualDuration})`;
                             }
                         });
                         
@@ -474,7 +490,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 connector.innerHTML = `
                     <div class="connector-line"></div>
                     <div class="connector-badge" id="connector-badge-${index}">
-                        <i class="fa-solid fa-car"></i>
+                        <i class="fa-solid ${modeIconClass}"></i>
                         <span>約 ${estDistanceStr} (${estDurationStr})</span>
                     </div>
                     <div class="connector-line"></div>
@@ -1129,6 +1145,18 @@ ${JSON.stringify(spots)}
         printWindow.document.close();
     });
     
+    // Transport mode change listener
+    if (transportModeSelect) {
+        transportModeSelect.addEventListener('change', () => {
+            if (currentData && currentData.map_points) {
+                initMap(currentData.map_points);
+                if (typeof appendTerminalLog === 'function') {
+                    appendTerminalLog('observation', `交通運輸模式已切換為：${transportModeSelect.options[transportModeSelect.selectedIndex].text}，正在重新繪製路線與計算交通時間。`);
+                }
+            }
+        });
+    }
+
     // Initial memory load
     loadMemory();
 });
