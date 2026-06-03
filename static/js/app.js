@@ -239,6 +239,23 @@ document.addEventListener('DOMContentLoaded', () => {
         terminalLogs.scrollTop = terminalLogs.scrollHeight;
     }
     
+    // Helper: estimate distance (Haversine) and duration
+    function estimateHaversine(lat1, lng1, lat2, lng2) {
+        const R = 6371; // Earth radius in km
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLng = (lng2 - lng1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c; // in km
+        const duration = distance * 60 / 35; // assume 35 km/h average speed in city
+        return {
+            distance: distance,
+            duration: duration
+        };
+    }
+    
     // Map initialization
     function initMap(points) {
         if (map) {
@@ -285,6 +302,30 @@ document.addEventListener('DOMContentLoaded', () => {
             mapLayers.push(marker);
             latlngs.push([pt.lat, pt.lng]);
         });
+
+        // Draw route info badges on the map (initially Haversine-based)
+        if (latlngs.length > 1) {
+            for (let i = 0; i < points.length - 1; i++) {
+                const pt1 = points[i];
+                const pt2 = points[i+1];
+                const midLat = (pt1.lat + pt2.lat) / 2;
+                const midLng = (pt1.lng + pt2.lng) / 2;
+                
+                const est = estimateHaversine(pt1.lat, pt1.lng, pt2.lat, pt2.lng);
+                const estDistanceStr = est.distance.toFixed(1) + " km";
+                const estDurationStr = Math.round(est.duration) + " 分鐘";
+                
+                const infoIcon = L.divIcon({
+                    className: 'route-info-badge-icon',
+                    html: `<div class="route-map-badge" id="map-badge-${i}">🚗 ${estDistanceStr} (${estDurationStr})</div>`,
+                    iconSize: [100, 24],
+                    iconAnchor: [50, 12]
+                });
+                
+                const infoMarker = L.marker([midLat, midLng], { icon: infoIcon }).addTo(map);
+                mapLayers.push(infoMarker);
+            }
+        }
         
         // Route line connecting spots (fetch OSRM driving route with straight line fallback)
         if (latlngs.length > 1) {
@@ -337,6 +378,28 @@ document.addEventListener('DOMContentLoaded', () => {
                             lineJoin: 'round'
                         }).addTo(map);
                         mapLayers.push(roadPolyline);
+                        
+                        // Update distances and times from OSRM legs
+                        const legs = data.routes[0].legs;
+                        legs.forEach((leg, i) => {
+                            const actualDistance = (leg.distance / 1000).toFixed(1) + " km";
+                            const actualDuration = Math.round(leg.duration / 60) + " 分鐘";
+                            
+                            // Update sidebar connector
+                            const badgeEl = document.getElementById(`connector-badge-${i}`);
+                            if (badgeEl) {
+                                badgeEl.innerHTML = `
+                                    <i class="fa-solid fa-car"></i>
+                                    <span>${actualDistance} (${actualDuration})</span>
+                                `;
+                            }
+                            
+                            // Update map badge
+                            const mapBadgeEl = document.getElementById(`map-badge-${i}`);
+                            if (mapBadgeEl) {
+                                mapBadgeEl.textContent = `🚗 ${actualDistance} (${actualDuration})`;
+                            }
+                        });
                         
                         // Fit to route bounds
                         try {
@@ -417,9 +480,31 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             
             mapSpotsList.appendChild(spotCard);
+
+            // Add connector indicator to next spot
+            if (index < points.length - 1) {
+                const connector = document.createElement('div');
+                connector.className = 'route-connector';
+                connector.id = `route-connector-${index}`;
+                
+                const est = estimateHaversine(pt.lat, pt.lng, points[index+1].lat, points[index+1].lng);
+                const estDistanceStr = est.distance.toFixed(1) + " km";
+                const estDurationStr = Math.round(est.duration) + " 分鐘";
+                
+                connector.innerHTML = `
+                    <div class="connector-line"></div>
+                    <div class="connector-badge" id="connector-badge-${index}">
+                        <i class="fa-solid fa-car"></i>
+                        <span>約 ${estDistanceStr} (${estDurationStr})</span>
+                    </div>
+                    <div class="connector-line"></div>
+                `;
+                mapSpotsList.appendChild(connector);
+            }
         });
         
         // Add click events to replacement buttons
+
         const replaceButtons = mapSpotsList.querySelectorAll('.btn-replace-spot');
         replaceButtons.forEach(btn => {
             btn.addEventListener('click', async (e) => {
