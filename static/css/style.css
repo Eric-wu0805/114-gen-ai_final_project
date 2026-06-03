@@ -1038,4 +1038,53 @@ textarea:focus {
     border-radius: 10px;
 }
 
+/* Route Connector Styles */
+.route-connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 4px 0;
+    padding: 0 10px;
+}
+.connector-line {
+    flex: 1;
+    height: 1px;
+    border-top: 1.5px dashed rgba(56, 189, 248, 0.3);
+}
+.connector-badge {
+    background: rgba(15, 23, 42, 0.65);
+    border: 1.5px dashed rgba(56, 189, 248, 0.5);
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 0.8em;
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    backdrop-filter: blur(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+.connector-badge i {
+    font-size: 0.95em;
+}
+
+/* Route Map Badge */
+.route-map-badge {
+    background: rgba(15, 23, 42, 0.85);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.6);
+    border-radius: 20px;
+    padding: 2px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+    font-family: var(--font-sans);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+    backdrop-filter: blur(4px);
+    text-align: center;
+    font-weight: 500;
+}
+
+
 
